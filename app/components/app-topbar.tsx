@@ -1,17 +1,20 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { getCurrentUser, logout } from "../api/auth";
+import { ApiError } from "../api/client";
 
 const navigation = [
-  { href: "/", label: "Panel" },
+  { href: "/panel", label: "Panel" },
   { href: "/creditos", label: "Créditos" },
   { href: "/inversiones", label: "Inversiones" },
   { href: "/ayudanos-a-mejorar", label: "Ayúdanos a mejorar" },
 ];
 
 const sectionDetails: Record<string, { title: string; description: string }> = {
-  "/": {
+  "/panel": {
     title: "Panel financiero",
     description: "Control general de tu capital",
   },
@@ -27,6 +30,10 @@ const sectionDetails: Record<string, { title: string; description: string }> = {
     title: "Ayúdanos a mejorar",
     description: "Construyamos una mejor experiencia",
   },
+  "/perfil": {
+    title: "Mi perfil",
+    description: "Información personal y seguridad de la cuenta",
+  },
 };
 
 type AppTopbarProps = {
@@ -35,13 +42,44 @@ type AppTopbarProps = {
 
 export function AppTopbar({ userName = "Usuario" }: AppTopbarProps) {
   const pathname = usePathname();
-  const initial = userName.trim().charAt(0).toUpperCase() || "U";
-  const currentSection = sectionDetails[pathname] ?? sectionDetails["/"];
+  const router = useRouter();
+  const [currentUserName, setCurrentUserName] = useState(userName);
+  const initial = currentUserName.trim().charAt(0).toUpperCase() || "U";
+  const currentSection = sectionDetails[pathname] ?? sectionDetails["/panel"];
+
+  const loadCurrentUser = useCallback(async () => {
+    try {
+      const user = await getCurrentUser();
+      setCurrentUserName(user.name);
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 401) {
+        logout();
+        router.replace("/");
+      }
+    }
+  }, [router]);
+
+  useEffect(() => {
+    void loadCurrentUser();
+
+    function handleUserUpdated(event: Event) {
+      const updatedUser = (event as CustomEvent<{ name: string }>).detail;
+      if (updatedUser?.name) setCurrentUserName(updatedUser.name);
+    }
+
+    window.addEventListener("flujo:user-updated", handleUserUpdated);
+    return () => window.removeEventListener("flujo:user-updated", handleUserUpdated);
+  }, [loadCurrentUser]);
+
+  function handleQuickLogout() {
+    logout();
+    router.replace("/");
+  }
 
   return (
     <header className="site-header">
       <div className="app-topbar">
-        <Link className="brand brand-link" href="/" aria-label="Ir al panel">
+        <Link className="brand brand-link" href="/panel" aria-label="Ir al panel">
           <span>F</span>
           <strong>Flujo</strong>
         </Link>
@@ -62,12 +100,30 @@ export function AppTopbar({ userName = "Usuario" }: AppTopbarProps) {
           })}
         </nav>
 
-        <div className="topbar-user" aria-label={`Usuario actual: ${userName}`}>
-          <span className="user-avatar">{initial}</span>
-          <span className="user-copy">
-            <small>Mi cuenta</small>
-            <strong>{userName}</strong>
-          </span>
+        <div className="topbar-account-actions">
+          <Link
+            className="topbar-user"
+            href="/perfil"
+            aria-label={`Abrir perfil de ${currentUserName}`}
+            aria-current={pathname === "/perfil" ? "page" : undefined}
+          >
+            <span className="user-avatar">{initial}</span>
+            <span className="user-copy">
+              <small>Mi cuenta</small>
+              <strong>{currentUserName}</strong>
+            </span>
+          </Link>
+
+          <button
+            className="topbar-logout"
+            type="button"
+            onClick={handleQuickLogout}
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
+          >
+            <span aria-hidden="true">↗</span>
+            Salir
+          </button>
         </div>
       </div>
 

@@ -1,5 +1,5 @@
-import { FinanceDashboard } from "./components/finance-dashboard";
+import { LoginScreen } from "./components/login-screen";
 
 export default function Page() {
-  return <FinanceDashboard />;
+  return <LoginScreen />;
 }

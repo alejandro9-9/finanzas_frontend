@@ -34,6 +34,16 @@ export interface VerifyEmailRequest {
   code: string;
 }
 
+export interface RequestPasswordResetRequest {
+  email: string;
+}
+
+export interface ConfirmPasswordResetRequest {
+  email: string;
+  code: string;
+  newPassword: string;
+}
+
 export interface MessageResponse {
   message: string;
 }
@@ -48,6 +58,8 @@ export interface UserResponse {
   createdAt: string;
   updatedAt: string;
 }
+
+export type UpdateUserRequest = Pick<UserResponse, "name" | "email">;
 
 export interface CreditResponse {
   id: string;

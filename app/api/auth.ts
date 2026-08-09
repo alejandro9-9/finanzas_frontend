@@ -1,11 +1,14 @@
 import { apiRequest, clearAccessToken, saveAccessToken } from "./client";
 import type {
+  ConfirmPasswordResetRequest,
   LoginRequest,
   LoginResponse,
   MessageResponse,
   RegisterRequest,
   RegisterResponse,
+  RequestPasswordResetRequest,
   ResendEmailVerificationRequest,
+  UpdateUserRequest,
   UserResponse,
   VerifyEmailRequest,
 } from "./contracts";
@@ -28,6 +31,13 @@ export function getCurrentUser() {
   return apiRequest<UserResponse>("/api/users/me");
 }
 
+export function updateCurrentUser(request: UpdateUserRequest) {
+  return apiRequest<string>("/api/users/me", {
+    method: "PUT",
+    body: JSON.stringify(request),
+  });
+}
+
 export function resendEmailVerification(
   request: ResendEmailVerificationRequest,
 ) {
@@ -41,6 +51,22 @@ export function resendEmailVerification(
 export function verifyEmail(request: VerifyEmailRequest) {
   return apiRequest<MessageResponse>(
     "/api/auth/email-verification/verify",
+    { method: "POST", body: JSON.stringify(request) },
+    false,
+  );
+}
+
+export function requestPasswordReset(request: RequestPasswordResetRequest) {
+  return apiRequest<MessageResponse>(
+    "/api/auth/password-reset/request",
+    { method: "POST", body: JSON.stringify(request) },
+    false,
+  );
+}
+
+export function confirmPasswordReset(request: ConfirmPasswordResetRequest) {
+  return apiRequest<MessageResponse>(
+    "/api/auth/password-reset/confirm",
     { method: "POST", body: JSON.stringify(request) },
     false,
   );
