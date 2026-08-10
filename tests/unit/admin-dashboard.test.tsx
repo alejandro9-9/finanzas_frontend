@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
     getAdminUsers: vi.fn(),
     getActiveUserCount: vi.fn(),
     blockAdminUser: vi.fn(),
+    unblockAdminUser: vi.fn(),
   };
 });
 
@@ -31,6 +32,7 @@ vi.mock("../../app/api/admin", () => ({
   getAdminUsers: mocks.getAdminUsers,
   getActiveUserCount: mocks.getActiveUserCount,
   blockAdminUser: mocks.blockAdminUser,
+  unblockAdminUser: mocks.unblockAdminUser,
 }));
 
 vi.mock("../../app/components/app-topbar", () => ({
@@ -84,6 +86,7 @@ describe("AdminDashboard", () => {
     ]);
     mocks.getActiveUserCount.mockResolvedValue({ total: 3 });
     mocks.blockAdminUser.mockResolvedValue(undefined);
+    mocks.unblockAdminUser.mockResolvedValue(undefined);
   });
 
   it("shows user statistics and the complete directory", async () => {
@@ -99,7 +102,7 @@ describe("AdminDashboard", () => {
     expect(screen.getByText("Carlos Pendiente")).toBeInTheDocument();
   });
 
-  it("blocks a user only after confirmation", async () => {
+  it("blocks and then unblocks a user only after confirmation", async () => {
     const user = userEvent.setup();
     render(<AdminDashboard />);
 
@@ -120,9 +123,23 @@ describe("AdminDashboard", () => {
       screen.getByText("Beatriz Usuario fue bloqueado correctamente."),
     ).toBeInTheDocument();
     const updatedRow = screen.getByRole("row", { name: /Beatriz Usuario.*Bloqueado/ });
+    const unblockButton = within(updatedRow).getByRole("button", {
+      name: "Desbloquear",
+    });
+    expect(unblockButton).toBeEnabled();
+
+    await user.click(unblockButton);
     expect(
-      within(updatedRow).getByRole("button", { name: "Bloqueado" }),
-    ).toBeDisabled();
+      screen.getByRole("alertdialog", { name: /Desbloquear a Beatriz Usuario/ }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sí, desbloquear usuario" }));
+
+    await waitFor(() => {
+      expect(mocks.unblockAdminUser).toHaveBeenCalledWith("user-1");
+    });
+    expect(
+      screen.getByText("Beatriz Usuario fue desbloqueado correctamente."),
+    ).toBeInTheDocument();
   });
 
   it("redirects a regular user away from administration", async () => {

@@ -14,3 +14,9 @@ export function blockAdminUser(userId: string) {
     method: "DELETE",
   });
 }
+
+export function unblockAdminUser(userId: string) {
+  return apiRequest<void>(`/api/admin/users/${userId}/unblock`, {
+    method: "PATCH",
+  });
+}

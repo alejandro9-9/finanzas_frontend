@@ -262,7 +262,7 @@ export function useFinanceDashboard() {
 
   async function saveCredit(id: string | null, changes: CreditChanges) {
     const committed = id ? creditCommitments[id] ?? 0 : 0;
-    if (changes.loan + 0.005 < committed) return false;
+    if (changes.loan + 0.005 < committed) return "capital-conflict" as const;
     setIsMutating(true);
     setError("");
     try {
@@ -276,10 +276,10 @@ export function useFinanceDashboard() {
       if (id === null) await financeApi.createCredit(request);
       else await financeApi.updateCredit(id, request);
       await refresh();
-      return true;
+      return "saved" as const;
     } catch (caught) {
       reportMutationError(caught, "No se pudo guardar el crédito.");
-      return false;
+      return "failed" as const;
     } finally {
       setIsMutating(false);
     }

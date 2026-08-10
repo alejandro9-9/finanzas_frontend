@@ -6,6 +6,7 @@ import {
   blockAdminUser,
   getActiveUserCount,
   getAdminUsers,
+  unblockAdminUser,
 } from "../api/admin";
 import { getCurrentUser, logout } from "../api/auth";
 import { ApiError } from "../api/client";
@@ -41,7 +42,7 @@ export function AdminDashboard() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [selectedUser, setSelectedUser] = useState<AdminUserResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isBlocking, setIsBlocking] = useState(false);
+  const [isUpdatingAccess, setIsUpdatingAccess] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -114,30 +115,55 @@ export function AdminDashboard() {
     });
   }, [filter, query, users]);
 
-  async function handleBlockUser() {
+  const isSelectedUserBlocked = selectedUser
+    ? !selectedUser.isActive || selectedUser.status === "blocked"
+    : false;
+
+  async function handleAccessChange() {
     if (!selectedUser) return;
 
-    setIsBlocking(true);
+    const isUnblocking = !selectedUser.isActive || selectedUser.status === "blocked";
+
+    setIsUpdatingAccess(true);
     setError("");
     setNotice("");
 
     try {
-      await blockAdminUser(selectedUser.id);
+      if (isUnblocking) {
+        await unblockAdminUser(selectedUser.id);
+      } else {
+        await blockAdminUser(selectedUser.id);
+      }
+
       setUsers((current) => current.map((user) =>
         user.id === selectedUser.id
-          ? { ...user, isActive: false, status: "blocked" }
+          ? {
+              ...user,
+              isActive: isUnblocking,
+              status: isUnblocking
+                ? user.emailVerified ? "active" : "pendingEmailConfirmation"
+                : "blocked",
+            }
           : user));
-      setActiveCount((current) => Math.max(0, current - 1));
-      setNotice(`${selectedUser.name} fue bloqueado correctamente.`);
+      setActiveCount((current) => isUnblocking
+        ? current + 1
+        : Math.max(0, current - 1));
+      setNotice(
+        isUnblocking
+          ? `${selectedUser.name} fue desbloqueado correctamente.`
+          : `${selectedUser.name} fue bloqueado correctamente.`,
+      );
       setSelectedUser(null);
     } catch (requestError) {
       setError(
         requestError instanceof ApiError
           ? requestError.message
-          : "No pudimos bloquear al usuario.",
+          : isUnblocking
+            ? "No pudimos desbloquear al usuario."
+            : "No pudimos bloquear al usuario.",
       );
     } finally {
-      setIsBlocking(false);
+      setIsUpdatingAccess(false);
     }
   }
 
@@ -286,12 +312,12 @@ export function AdminDashboard() {
                     <td>{dateFormatter.format(new Date(user.createdAt))}</td>
                     <td>
                       <button
-                        className="admin-block-button"
+                        className={`admin-block-button${isBlocked ? " is-unblock" : ""}`}
                         type="button"
-                        disabled={isCurrentAdmin || isBlocked}
+                        disabled={isCurrentAdmin}
                         onClick={() => setSelectedUser(user)}
                       >
-                        {isCurrentAdmin ? "Tu cuenta" : isBlocked ? "Bloqueado" : "Bloquear"}
+                        {isCurrentAdmin ? "Tu cuenta" : isBlocked ? "Desbloquear" : "Bloquear"}
                       </button>
                     </td>
                   </tr>
@@ -315,31 +341,43 @@ export function AdminDashboard() {
             className="admin-dialog"
             role="alertdialog"
             aria-modal="true"
-            aria-labelledby="block-user-title"
-            aria-describedby="block-user-description"
+            aria-labelledby="access-user-title"
+            aria-describedby="access-user-description"
           >
-            <span className="admin-dialog-icon" aria-hidden="true">!</span>
-            <p className="eyebrow">CONFIRMAR BLOQUEO</p>
-            <h2 id="block-user-title">¿Bloquear a {selectedUser.name}?</h2>
-            <p id="block-user-description">
-              La cuenta perderá acceso inmediatamente. Sus datos financieros no
-              se eliminarán y permanecerán disponibles en la base de datos.
+            <span
+              className={`admin-dialog-icon${isSelectedUserBlocked ? " is-unblock" : ""}`}
+              aria-hidden="true"
+            >
+              {isSelectedUserBlocked ? "↻" : "!"}
+            </span>
+            <p className="eyebrow">
+              {isSelectedUserBlocked ? "CONFIRMAR DESBLOQUEO" : "CONFIRMAR BLOQUEO"}
+            </p>
+            <h2 id="access-user-title">
+              {isSelectedUserBlocked ? "¿Desbloquear" : "¿Bloquear"} a {selectedUser.name}?
+            </h2>
+            <p id="access-user-description">
+              {isSelectedUserBlocked
+                ? "La cuenta recuperará el acceso. Si su correo aún no fue verificado, deberá confirmarlo antes de iniciar sesión."
+                : "La cuenta perderá acceso inmediatamente. Sus datos financieros no se eliminarán y permanecerán disponibles en la base de datos."}
             </p>
             <div>
               <button
                 type="button"
                 onClick={() => setSelectedUser(null)}
-                disabled={isBlocking}
+                disabled={isUpdatingAccess}
               >
                 Cancelar
               </button>
               <button
-                className="confirm-block"
+                className={isSelectedUserBlocked ? "confirm-unblock" : "confirm-block"}
                 type="button"
-                onClick={() => void handleBlockUser()}
-                disabled={isBlocking}
+                onClick={() => void handleAccessChange()}
+                disabled={isUpdatingAccess}
               >
-                {isBlocking ? "Bloqueando..." : "Sí, bloquear usuario"}
+                {isUpdatingAccess
+                  ? isSelectedUserBlocked ? "Desbloqueando..." : "Bloqueando..."
+                  : isSelectedUserBlocked ? "Sí, desbloquear usuario" : "Sí, bloquear usuario"}
               </button>
             </div>
           </section>

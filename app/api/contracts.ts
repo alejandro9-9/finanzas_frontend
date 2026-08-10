@@ -69,6 +69,23 @@ export interface UserCountResponse {
   total: number;
 }
 
+export interface CreateFeedbackMessageRequest {
+  message: string;
+}
+
+export interface CreateFeedbackMessageResponse {
+  id: string;
+}
+
+export interface FeedbackMessageResponse {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  message: string;
+  createdAt: string;
+}
+
 export interface CreditResponse {
   id: string;
   userId: string;

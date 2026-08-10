@@ -10,13 +10,27 @@ import {
   updateCurrentUser,
 } from "../api/auth";
 import { ApiError } from "../api/client";
-import type { UserResponse } from "../api/contracts";
+import { getFeedbackMessages } from "../api/feedback";
+import type {
+  FeedbackMessageResponse,
+  UserResponse,
+} from "../api/contracts";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("es-PE", {
     day: "2-digit",
     month: "long",
     year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("es-PE", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(new Date(value));
 }
 
@@ -27,6 +41,10 @@ export function ProfileScreen() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [feedbackMessages, setFeedbackMessages] = useState<
+    FeedbackMessageResponse[]
+  >([]);
+  const [feedbackError, setFeedbackError] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -37,6 +55,18 @@ export function ProfileScreen() {
         setUser(currentUser);
         setName(currentUser.name);
         setEmail(currentUser.email);
+
+        if (currentUser.role === "Administrator") {
+          try {
+            setFeedbackMessages(await getFeedbackMessages());
+          } catch (requestError) {
+            setFeedbackError(
+              requestError instanceof ApiError
+                ? requestError.message
+                : "No pudimos cargar los mensajes recibidos.",
+            );
+          }
+        }
       } catch (requestError) {
         if (requestError instanceof ApiError && requestError.status === 401) {
           await logout();
@@ -125,6 +155,7 @@ export function ProfileScreen() {
       ) : error && !user ? (
         <section className="profile-message profile-message-error" role="alert">{error}</section>
       ) : user ? (
+        <>
         <section className="profile-layout">
           <aside className="profile-summary">
             <span className="profile-avatar" aria-hidden="true">{initial}</span>
@@ -203,6 +234,50 @@ export function ProfileScreen() {
             </form>
           </div>
         </section>
+
+        {user.role === "Administrator" ? (
+          <section className="profile-feedback-inbox">
+            <div className="profile-feedback-heading">
+              <div>
+                <p className="eyebrow">BANDEJA ADMINISTRATIVA</p>
+                <h2>Mensajes de los usuarios</h2>
+              </div>
+              <span>{feedbackMessages.length} recibidos</span>
+            </div>
+
+            {feedbackError ? (
+              <p className="profile-message profile-message-error" role="alert">
+                {feedbackError}
+              </p>
+            ) : feedbackMessages.length > 0 ? (
+              <div className="profile-feedback-list">
+                {feedbackMessages.map((feedbackMessage) => (
+                  <article key={feedbackMessage.id}>
+                    <header>
+                      <span className="profile-feedback-avatar" aria-hidden="true">
+                        {feedbackMessage.userName.trim().charAt(0).toUpperCase() || "U"}
+                      </span>
+                      <div>
+                        <strong>{feedbackMessage.userName}</strong>
+                        <small>{feedbackMessage.userEmail}</small>
+                      </div>
+                      <time dateTime={feedbackMessage.createdAt}>
+                        {formatDateTime(feedbackMessage.createdAt)}
+                      </time>
+                    </header>
+                    <p>{feedbackMessage.message}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="profile-feedback-empty">
+                <strong>Aún no recibiste mensajes</strong>
+                <span>Las sugerencias de los usuarios aparecerán aquí.</span>
+              </div>
+            )}
+          </section>
+        ) : null}
+        </>
       ) : null}
     </main>
   );

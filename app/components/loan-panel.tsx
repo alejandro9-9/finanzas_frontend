@@ -15,7 +15,10 @@ type LoanPanelProps = {
   onRemoveCredit: (
     id: string,
   ) => Promise<"deleted" | "has-open-investments" | "failed">;
-  onSaveCredit: (id: string | null, changes: CreditChanges) => Promise<boolean>;
+  onSaveCredit: (
+    id: string | null,
+    changes: CreditChanges,
+  ) => Promise<"saved" | "capital-conflict" | "failed">;
 };
 
 function getEditableValues(credit: Credit): CreditChanges {
@@ -110,15 +113,39 @@ export function LoanPanel({
 
   async function saveChanges() {
     if (!editDraft) return;
+
+    if (!editDraft.name.trim()) {
+      setPopupMessage("Ingresa un nombre para el crédito.");
+      return;
+    }
+    if (editDraft.loan <= 0) {
+      setPopupMessage("El monto recibido debe ser mayor que cero.");
+      return;
+    }
+    if (editDraft.installments <= 0) {
+      setPopupMessage("El número de cuotas debe ser mayor que cero.");
+      return;
+    }
+    if (editDraft.payment <= 0) {
+      setPopupMessage("El valor de cada cuota debe ser mayor que cero.");
+      return;
+    }
+    if (!editDraft.firstPaymentDate) {
+      setPopupMessage("Selecciona la fecha de la primera cuota.");
+      return;
+    }
+
     const id = isCreating ? null : activeCredit?.id ?? null;
-    const saved = await onSaveCredit(id, editDraft);
-    if (!saved) {
+    const result = await onSaveCredit(id, editDraft);
+    if (result === "capital-conflict") {
       const committedCapital = id ? creditCommitments[id] ?? 0 : 0;
       setPopupMessage(
         `El monto no puede ser menor que ${money.format(committedCapital)}, porque ese capital está siendo usado en inversiones abiertas.`,
       );
       return;
     }
+    if (result === "failed") return;
+
     setIsCreating(false);
     setEditingCreditId(null);
     setEditDraft(null);
@@ -152,8 +179,11 @@ export function LoanPanel({
     field: K,
     value: CreditChanges[K],
   ) {
-    if (!editDraft) return;
-    setEditDraft({ ...editDraft, [field]: value });
+    setEditDraft((currentDraft) =>
+      currentDraft
+        ? { ...currentDraft, [field]: value }
+        : currentDraft,
+    );
   }
 
   return (
