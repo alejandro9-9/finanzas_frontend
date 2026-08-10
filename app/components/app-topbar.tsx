@@ -43,13 +43,17 @@ const sectionDetails: Record<string, { title: string; description: string }> = {
 
 type AppTopbarProps = {
   userName?: string;
+  userRole?: UserRole;
 };
 
-export function AppTopbar({ userName = "Usuario" }: AppTopbarProps) {
+export function AppTopbar({
+  userName = "Usuario",
+  userRole = "User",
+}: AppTopbarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [currentUserName, setCurrentUserName] = useState(userName);
-  const [currentUserRole, setCurrentUserRole] = useState<UserRole>("User");
+  const [currentUserRole, setCurrentUserRole] = useState<UserRole>(userRole);
   const initial = currentUserName.trim().charAt(0).toUpperCase() || "U";
   const currentSection = sectionDetails[pathname] ?? sectionDetails["/panel"];
 
@@ -89,7 +93,10 @@ export function AppTopbar({ userName = "Usuario" }: AppTopbarProps) {
   }
 
   const visibleNavigation = currentUserRole === "Administrator"
-    ? [...navigation, { href: "/administracion", label: "Administración" }]
+    ? [
+        ...navigation.filter((item) => item.href !== "/ayudanos-a-mejorar"),
+        { href: "/administracion", label: "Administración" },
+      ]
     : navigation;
 
   return (

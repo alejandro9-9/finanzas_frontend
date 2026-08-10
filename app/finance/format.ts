@@ -11,19 +11,27 @@ export const dollars = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
+export function normalizeCurrency(currency: string): Currency {
+  return currency.toUpperCase() === "USD" ? "USD" : "PEN";
+}
+
 export function toSoles(
   amount: number,
   currency: "PEN" | "USD",
   exchangeRate: number,
 ) {
-  return currency === "USD" ? amount * exchangeRate : amount;
+  return normalizeCurrency(currency) === "USD"
+    ? amount * exchangeRate
+    : amount;
 }
 
 export function formatInvestmentAmount(
   amount: number,
   currency: Currency,
 ) {
-  return currency === "USD" ? dollars.format(amount) : money.format(amount);
+  return normalizeCurrency(currency) === "USD"
+    ? dollars.format(amount)
+    : money.format(amount);
 }
 
 export function getAdditionalCostsTotal(additionalCosts: AdditionalCost[]) {

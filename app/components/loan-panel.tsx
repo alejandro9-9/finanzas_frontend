@@ -68,6 +68,8 @@ export function LoanPanel({
       : null;
   const creditPaid =
     (activeCredit?.installments ?? 0) > 0 && remainingInstallments === 0;
+  const scheduleLocked =
+    !isCreating && (activeCredit?.paidInstallments.length ?? 0) > 0;
   const creditCount = credits.length;
   const showEmptyState = creditCount === 0 && !isCreating;
 
@@ -297,7 +299,7 @@ export function LoanPanel({
               min="1"
               placeholder="Ingresa las cuotas"
               value={displayedCredit.installments || ""}
-              disabled={!isEditing || !isCreating}
+              disabled={!isEditing || scheduleLocked}
               onChange={(event) => {
                 const value = Number(event.target.value);
                 updateDraft("installments", value);
@@ -314,7 +316,7 @@ export function LoanPanel({
                 min="0"
                 placeholder="Ingresa el valor"
                 value={displayedCredit.payment || ""}
-                disabled={!isEditing || !isCreating}
+                disabled={!isEditing || scheduleLocked}
                 onChange={(event) =>
                   updateDraft("payment", Number(event.target.value))
                 }
@@ -326,13 +328,18 @@ export function LoanPanel({
             <input
               type="date"
               value={displayedCredit.firstPaymentDate}
-              disabled={!isEditing || !isCreating}
+              disabled={!isEditing || scheduleLocked}
               onChange={(event) =>
                 updateDraft("firstPaymentDate", event.target.value)
               }
             />
           </label>
         </div>
+        {isEditing && scheduleLocked ? (
+          <p className="credit-schedule-lock" role="note">
+            El calendario no puede modificarse porque ya tiene cuotas pagadas.
+          </p>
+        ) : null}
       </div>}
 
       {isEditing && (

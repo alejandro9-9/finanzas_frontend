@@ -2,7 +2,11 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminDashboard } from "../../app/components/admin-dashboard";
-import type { AdminUserResponse, UserResponse } from "../../app/api/contracts";
+import type {
+  AdminUserResponse,
+  FeedbackMessageResponse,
+  UserResponse,
+} from "../../app/api/contracts";
 
 const mocks = vi.hoisted(() => {
   const replace = vi.fn();
@@ -16,6 +20,7 @@ const mocks = vi.hoisted(() => {
     getActiveUserCount: vi.fn(),
     blockAdminUser: vi.fn(),
     unblockAdminUser: vi.fn(),
+    getFeedbackMessages: vi.fn(),
   };
 });
 
@@ -33,6 +38,10 @@ vi.mock("../../app/api/admin", () => ({
   getActiveUserCount: mocks.getActiveUserCount,
   blockAdminUser: mocks.blockAdminUser,
   unblockAdminUser: mocks.unblockAdminUser,
+}));
+
+vi.mock("../../app/api/feedback", () => ({
+  getFeedbackMessages: mocks.getFeedbackMessages,
 }));
 
 vi.mock("../../app/components/app-topbar", () => ({
@@ -75,6 +84,15 @@ const pendingUser: AdminUserResponse = {
   updatedAt: "2026-08-03T12:00:00Z",
 };
 
+const feedbackMessage: FeedbackMessageResponse = {
+  id: "feedback-1",
+  userId: regularUser.id,
+  userName: regularUser.name,
+  userEmail: regularUser.email,
+  message: "Necesito exportar mis inversiones.",
+  createdAt: "2026-08-10T18:00:00Z",
+};
+
 describe("AdminDashboard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -87,6 +105,7 @@ describe("AdminDashboard", () => {
     mocks.getActiveUserCount.mockResolvedValue({ total: 3 });
     mocks.blockAdminUser.mockResolvedValue(undefined);
     mocks.unblockAdminUser.mockResolvedValue(undefined);
+    mocks.getFeedbackMessages.mockResolvedValue([feedbackMessage]);
   });
 
   it("shows user statistics and the complete directory", async () => {
@@ -98,15 +117,25 @@ describe("AdminDashboard", () => {
     expect(screen.getByText("Total registrados")).toBeInTheDocument();
     expect(screen.getByText("Usuarios activos")).toBeInTheDocument();
     expect(screen.getByText("Por verificar")).toBeInTheDocument();
-    expect(screen.getByText("Beatriz Usuario")).toBeInTheDocument();
-    expect(screen.getByText("Carlos Pendiente")).toBeInTheDocument();
+    const directory = screen.getByRole("table", { name: "Directorio de usuarios" });
+    expect(within(directory).getByText("Beatriz Usuario")).toBeInTheDocument();
+    expect(within(directory).getByText("Carlos Pendiente")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Mensajes de los usuarios" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Necesito exportar mis inversiones."),
+    ).toBeInTheDocument();
   });
 
   it("blocks and then unblocks a user only after confirmation", async () => {
     const user = userEvent.setup();
     render(<AdminDashboard />);
 
-    const userName = await screen.findByText("Beatriz Usuario");
+    const directory = await screen.findByRole("table", {
+      name: "Directorio de usuarios",
+    });
+    const userName = within(directory).getByText("Beatriz Usuario");
     const row = userName.closest("tr");
     expect(row).not.toBeNull();
     await user.click(within(row!).getByRole("button", { name: "Bloquear" }));

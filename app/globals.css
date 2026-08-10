@@ -398,6 +398,8 @@ button.login-submit:focus-visible { outline:3px solid var(--green); outline-offs
 .admin-empty { display:flex; flex-direction:column; align-items:center; gap:7px; padding:52px 20px; color:#777c74; text-align:center; }
 .admin-empty strong { color:var(--ink); font-size:17px; }
 .admin-empty span { font-size:10px; }
+.admin-feedback-inbox { margin-bottom:64px; }
+.credit-schedule-lock { margin:14px 0 0; color:#95650e; font-size:10px; font-weight:700; }
 .admin-loading { min-height:calc(100vh - 166px); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
 .admin-loading>span { display:grid; place-items:center; width:54px; height:54px; margin-bottom:22px; border-radius:50%; background:var(--lime); font-weight:900; letter-spacing:.08em; }
 .admin-loading h1 { margin:8px 0 0; font-size:42px; letter-spacing:-.05em; }

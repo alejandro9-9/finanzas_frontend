@@ -4,6 +4,7 @@ import {
   getCreditFundedInvestmentCost,
   getInvestmentCostInSoles,
   getLoanFundedInvestmentCost,
+  normalizeCurrency,
   toSoles,
 } from "../../app/finance/format";
 import type { AdditionalCost, Investment } from "../../app/finance/types";
@@ -45,6 +46,14 @@ describe("finance format calculations", () => {
   it("converts only USD amounts to soles", () => {
     expect(toSoles(100, "PEN", 3.75)).toBe(100);
     expect(toSoles(100, "USD", 3.75)).toBe(375);
+    expect(toSoles(419, "usd" as "USD", 3.39)).toBeCloseTo(1_420.41);
+    expect(normalizeCurrency("usd")).toBe("USD");
+  });
+
+  it("calculates profit from a dollar cost and a sale price in soles", () => {
+    const costInSoles = toSoles(419, "USD", 3.39);
+
+    expect(1_850 - costInSoles).toBeCloseTo(429.59);
   });
 
   it("adds costs using each cost exchange rate", () => {

@@ -22,7 +22,14 @@ export function FeedbackScreen() {
   useEffect(() => {
     async function loadUser() {
       try {
-        setUser(await getCurrentUser());
+        const currentUser = await getCurrentUser();
+
+        if (currentUser.role === "Administrator") {
+          router.replace("/administracion");
+          return;
+        }
+
+        setUser(currentUser);
       } catch (requestError) {
         if (requestError instanceof ApiError && requestError.status === 401) {
           await logout();

@@ -10,7 +10,13 @@ import {
 } from "../api/admin";
 import { getCurrentUser, logout } from "../api/auth";
 import { ApiError } from "../api/client";
-import type { AdminUserResponse, UserResponse, UserStatus } from "../api/contracts";
+import { getFeedbackMessages } from "../api/feedback";
+import type {
+  AdminUserResponse,
+  FeedbackMessageResponse,
+  UserResponse,
+  UserStatus,
+} from "../api/contracts";
 import { AppTopbar } from "./app-topbar";
 
 type StatusFilter = "all" | "active" | "pending" | "blocked";
@@ -19,6 +25,14 @@ const dateFormatter = new Intl.DateTimeFormat("es-PE", {
   day: "2-digit",
   month: "short",
   year: "numeric",
+});
+
+const dateTimeFormatter = new Intl.DateTimeFormat("es-PE", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
 });
 
 const statusLabels: Record<UserStatus, string> = {
@@ -37,6 +51,9 @@ export function AdminDashboard() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(null);
   const [users, setUsers] = useState<AdminUserResponse[]>([]);
+  const [feedbackMessages, setFeedbackMessages] = useState<
+    FeedbackMessageResponse[]
+  >([]);
   const [activeCount, setActiveCount] = useState(0);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
@@ -44,11 +61,13 @@ export function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingAccess, setIsUpdatingAccess] = useState(false);
   const [error, setError] = useState("");
+  const [feedbackError, setFeedbackError] = useState("");
   const [notice, setNotice] = useState("");
 
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
     setError("");
+    setFeedbackError("");
 
     try {
       const user = await getCurrentUser();
@@ -64,6 +83,16 @@ export function AdminDashboard() {
       ]);
       setUsers(adminUsers);
       setActiveCount(count.total);
+
+      try {
+        setFeedbackMessages(await getFeedbackMessages());
+      } catch (requestError) {
+        setFeedbackError(
+          requestError instanceof ApiError
+            ? requestError.message
+            : "No pudimos cargar los mensajes recibidos.",
+        );
+      }
     } catch (requestError) {
       if (requestError instanceof ApiError && requestError.status === 401) {
         await logout();
@@ -182,7 +211,10 @@ export function AdminDashboard() {
 
   return (
     <main className="admin-page">
-      <AppTopbar userName={currentUser.name} />
+      <AppTopbar
+        userName={currentUser.name}
+        userRole={currentUser.role}
+      />
 
       <section className="admin-hero">
         <div>
@@ -267,7 +299,7 @@ export function AdminDashboard() {
         {error ? <p className="admin-error" role="alert">{error}</p> : null}
 
         <div className="admin-table-wrapper">
-          <table className="admin-users-table">
+          <table className="admin-users-table" aria-label="Directorio de usuarios">
             <thead>
               <tr>
                 <th>Usuario</th>
@@ -333,6 +365,45 @@ export function AdminDashboard() {
             </div>
           ) : null}
         </div>
+      </section>
+
+      <section className="profile-feedback-inbox admin-feedback-inbox">
+        <div className="profile-feedback-heading">
+          <div>
+            <p className="eyebrow">BANDEJA ADMINISTRATIVA</p>
+            <h2>Mensajes de los usuarios</h2>
+          </div>
+          <span>{feedbackMessages.length} recibidos</span>
+        </div>
+
+        {feedbackError ? (
+          <p className="admin-error" role="alert">{feedbackError}</p>
+        ) : feedbackMessages.length > 0 ? (
+          <div className="profile-feedback-list">
+            {feedbackMessages.map((feedbackMessage) => (
+              <article key={feedbackMessage.id}>
+                <header>
+                  <span className="profile-feedback-avatar" aria-hidden="true">
+                    {feedbackMessage.userName.trim().charAt(0).toUpperCase() || "U"}
+                  </span>
+                  <div>
+                    <strong>{feedbackMessage.userName}</strong>
+                    <small>{feedbackMessage.userEmail}</small>
+                  </div>
+                  <time dateTime={feedbackMessage.createdAt}>
+                    {dateTimeFormatter.format(new Date(feedbackMessage.createdAt))}
+                  </time>
+                </header>
+                <p>{feedbackMessage.message}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="profile-feedback-empty">
+            <strong>Aún no recibiste mensajes</strong>
+            <span>Las sugerencias de los usuarios aparecerán aquí.</span>
+          </div>
+        )}
       </section>
 
       {selectedUser ? (

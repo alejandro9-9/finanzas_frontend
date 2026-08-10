@@ -21,6 +21,7 @@ import {
   getCreditFundedInvestmentCost,
   getInvestmentCostInSoles,
   getLoanFundedInvestmentCost,
+  normalizeCurrency,
 } from "./format";
 
 export const EMPTY_DRAFT: InvestmentDraft = {
@@ -60,7 +61,11 @@ function getCreditTotals(credit: Credit) {
 }
 
 function mapSnapshot(snapshot: FinanceSnapshot) {
-  const accounts = new Map(snapshot.capitalAccounts.map((account) => [account.id, account]));
+  const capitalAccounts = snapshot.capitalAccounts.map((account) => ({
+    ...account,
+    currency: normalizeCurrency(account.currency),
+  }));
+  const accounts = new Map(capitalAccounts.map((account) => [account.id, account]));
   const credits: Credit[] = snapshot.credits
     .filter((credit) => credit.status !== "archived")
     .map((credit) => ({
@@ -93,7 +98,7 @@ function mapSnapshot(snapshot: FinanceSnapshot) {
           capitalAccountId: cost.capitalAccountId,
           name: cost.description,
           amount: cost.originalAmount,
-          currency: cost.currency,
+          currency: normalizeCurrency(cost.currency),
           exchangeRate: cost.exchangeRate,
           capitalSource: accountTypeToSource(costAccount.type),
           creditId: cost.creditId ?? undefined,
@@ -106,7 +111,7 @@ function mapSnapshot(snapshot: FinanceSnapshot) {
         name: investment.name,
         amount: investment.originalAmount,
         salePricePen: investment.projectedSalePrice,
-        currency: investment.currency,
+        currency: normalizeCurrency(investment.currency),
         exchangeRate: investment.exchangeRate,
         capitalSource: accountTypeToSource(account.type),
         creditId: investment.creditId ?? undefined,
@@ -115,7 +120,7 @@ function mapSnapshot(snapshot: FinanceSnapshot) {
       };
     });
 
-  return { credits, investments };
+  return { credits, investments, capitalAccounts };
 }
 
 export function useFinanceDashboard() {
@@ -142,7 +147,7 @@ export function useFinanceDashboard() {
       const mapped = mapSnapshot(snapshot);
       setCredits(mapped.credits);
       setInvestments(mapped.investments);
-      const activeAccounts = snapshot.capitalAccounts.filter((account) => account.isActive);
+      const activeAccounts = mapped.capitalAccounts.filter((account) => account.isActive);
       capitalAccountsRef.current = activeAccounts;
       setInstallmentsByCreditId(snapshot.installmentsByCreditId);
       setHasLoaded(true);

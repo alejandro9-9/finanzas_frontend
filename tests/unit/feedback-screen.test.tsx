@@ -65,4 +65,18 @@ describe("FeedbackScreen", () => {
     ).toBeInTheDocument();
     expect(messageInput).toHaveValue("");
   });
+
+  it("redirects an administrator to the administration page", async () => {
+    mocks.getCurrentUser.mockResolvedValue({
+      ...regularUser,
+      role: "Administrator",
+    });
+
+    render(<FeedbackScreen />);
+
+    await waitFor(() => {
+      expect(mocks.replace).toHaveBeenCalledWith("/administracion");
+    });
+    expect(screen.queryByLabelText("Mensaje")).not.toBeInTheDocument();
+  });
 });
