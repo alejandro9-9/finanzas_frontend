@@ -23,8 +23,14 @@ export async function login(request: LoginRequest) {
   return response;
 }
 
-export function logout() {
-  clearAccessToken();
+export async function logout() {
+  try {
+    await apiRequest<void>("/api/auth/logout", { method: "POST" }, false);
+  } catch {
+    // La sesión local debe cerrarse incluso si el backend no está disponible.
+  } finally {
+    clearAccessToken();
+  }
 }
 
 export function getCurrentUser() {

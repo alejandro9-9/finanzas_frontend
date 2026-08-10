@@ -39,7 +39,7 @@ export function ProfileScreen() {
         setEmail(currentUser.email);
       } catch (requestError) {
         if (requestError instanceof ApiError && requestError.status === 401) {
-          logout();
+          await logout();
           router.replace("/");
           return;
         }
@@ -76,7 +76,7 @@ export function ProfileScreen() {
         try {
           await resendEmailVerification({ email: normalizedEmail });
         } finally {
-          logout();
+          await logout();
           router.push(`/verificar-correo?email=${encodeURIComponent(normalizedEmail)}`);
         }
         return;
@@ -101,8 +101,8 @@ export function ProfileScreen() {
     }
   }
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await logout();
     router.replace("/");
   }
 

@@ -6,13 +6,25 @@ import { AppTopbar } from "./app-topbar";
 import { CapitalOverview } from "./capital-overview";
 import { LoanPanel } from "./loan-panel";
 import { Summary } from "./summary";
+import { FinanceDataGate } from "./finance-data-gate";
 
 export function FinanceDashboard() {
   const finance = useFinanceDashboard();
 
+  if (!finance.hasLoaded) {
+    return (
+      <FinanceDataGate
+        isLoading={finance.isLoading}
+        error={finance.error}
+        onRetry={() => void finance.refresh()}
+      />
+    );
+  }
+
   return (
     <main>
       <AppTopbar />
+      {finance.error && <p className="finance-api-error" role="alert">{finance.error}</p>}
 
       <section className="hero">
         <div>
@@ -50,7 +62,6 @@ export function FinanceDashboard() {
           remainingInstallments={finance.activeCreditTotals.remainingInstallments}
           creditCommitments={finance.creditCommitments}
           onSelectCredit={finance.setActiveCreditId}
-          onAddCredit={finance.addCredit}
           onRemoveCredit={finance.removeCredit}
           onSaveCredit={finance.saveCredit}
         />

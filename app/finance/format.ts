@@ -78,10 +78,10 @@ export function getCreditFundedInvestmentCost(
     currency: Currency;
     exchangeRate: number;
     capitalSource: CapitalSource;
-    creditId?: number | null;
+    creditId?: string | null;
     additionalCosts: AdditionalCost[];
   },
-  creditId: number,
+  creditId: string,
 ) {
   const baseCost =
     investment.capitalSource === "loan" && investment.creditId === creditId

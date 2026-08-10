@@ -15,7 +15,10 @@ export function VerifyEmailScreen() {
 
   useEffect(() => {
     const pendingEmail = new URLSearchParams(window.location.search).get("email");
-    if (pendingEmail) setEmail(pendingEmail);
+    if (!pendingEmail) return;
+
+    const frame = window.requestAnimationFrame(() => setEmail(pendingEmail));
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   function getErrorMessage(requestError: unknown) {

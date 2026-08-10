@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { money } from "../finance/format";
 import { useFinanceDashboard } from "../finance/use-finance-dashboard";
 import { AppTopbar } from "./app-topbar";
+import { FinanceDataGate } from "./finance-data-gate";
 
 const paymentDate = new Intl.DateTimeFormat("es-PE", {
   day: "2-digit",
@@ -60,6 +61,21 @@ export function CreditDashboard() {
     "pending",
   );
   const [showAllPayments, setShowAllPayments] = useState(false);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setToday(new Date()));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  if (!finance.hasLoaded) {
+    return (
+      <FinanceDataGate
+        isLoading={finance.isLoading}
+        error={finance.error}
+        onRetry={() => void finance.refresh()}
+      />
+    );
+  }
   const paidPaymentNumbers = new Set(finance.paidInstallments);
   const nextPaymentIndex = finance.paymentSchedule.findIndex(
     (installment) => !paidPaymentNumbers.has(installment.number),
@@ -84,14 +100,10 @@ export function CreditDashboard() {
     ? selectedPayments
     : selectedPayments.slice(0, VISIBLE_PAYMENT_LIMIT);
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setToday(new Date()));
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
   return (
     <main className="credit-page">
       <AppTopbar />
+      {finance.error && <p className="finance-api-error" role="alert">{finance.error}</p>}
 
       <section className="credit-page-hero">
         <div>
@@ -112,9 +124,9 @@ export function CreditDashboard() {
         <div>
           <span>Crédito mostrado</span>
           <select
-            value={finance.activeCreditId}
+            value={finance.activeCreditId ?? ""}
             onChange={(event) =>
-              finance.setActiveCreditId(Number(event.target.value))
+              finance.setActiveCreditId(event.target.value)
             }
           >
             {finance.credits.map((credit) => (
@@ -124,9 +136,7 @@ export function CreditDashboard() {
             ))}
           </select>
         </div>
-        <button type="button" onClick={finance.addCredit}>
-          + Nuevo crédito
-        </button>
+        <Link href="/panel">+ Nuevo crédito</Link>
       </section>
 
       {finance.loan <= 0 ? (

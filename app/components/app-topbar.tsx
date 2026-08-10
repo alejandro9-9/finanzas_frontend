@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { getCurrentUser, logout } from "../api/auth";
 import { ApiError } from "../api/client";
+import type { UserRole } from "../api/contracts";
 
 const navigation = [
   { href: "/panel", label: "Panel" },
@@ -34,6 +35,10 @@ const sectionDetails: Record<string, { title: string; description: string }> = {
     title: "Mi perfil",
     description: "Información personal y seguridad de la cuenta",
   },
+  "/administracion": {
+    title: "Administración",
+    description: "Usuarios, accesos y estado de la plataforma",
+  },
 };
 
 type AppTopbarProps = {
@@ -44,6 +49,7 @@ export function AppTopbar({ userName = "Usuario" }: AppTopbarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [currentUserName, setCurrentUserName] = useState(userName);
+  const [currentUserRole, setCurrentUserRole] = useState<UserRole>("User");
   const initial = currentUserName.trim().charAt(0).toUpperCase() || "U";
   const currentSection = sectionDetails[pathname] ?? sectionDetails["/panel"];
 
@@ -51,16 +57,19 @@ export function AppTopbar({ userName = "Usuario" }: AppTopbarProps) {
     try {
       const user = await getCurrentUser();
       setCurrentUserName(user.name);
+      setCurrentUserRole(user.role);
     } catch (requestError) {
       if (requestError instanceof ApiError && requestError.status === 401) {
-        logout();
+        await logout();
         router.replace("/");
       }
     }
   }, [router]);
 
   useEffect(() => {
-    void loadCurrentUser();
+    const frame = window.requestAnimationFrame(() => {
+      void loadCurrentUser();
+    });
 
     function handleUserUpdated(event: Event) {
       const updatedUser = (event as CustomEvent<{ name: string }>).detail;
@@ -68,13 +77,20 @@ export function AppTopbar({ userName = "Usuario" }: AppTopbarProps) {
     }
 
     window.addEventListener("flujo:user-updated", handleUserUpdated);
-    return () => window.removeEventListener("flujo:user-updated", handleUserUpdated);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("flujo:user-updated", handleUserUpdated);
+    };
   }, [loadCurrentUser]);
 
-  function handleQuickLogout() {
-    logout();
+  async function handleQuickLogout() {
+    await logout();
     router.replace("/");
   }
+
+  const visibleNavigation = currentUserRole === "Administrator"
+    ? [...navigation, { href: "/administracion", label: "Administración" }]
+    : navigation;
 
   return (
     <header className="site-header">
@@ -85,7 +101,7 @@ export function AppTopbar({ userName = "Usuario" }: AppTopbarProps) {
         </Link>
 
         <nav className="main-navigation" aria-label="Navegación principal">
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
@@ -134,7 +150,7 @@ export function AppTopbar({ userName = "Usuario" }: AppTopbarProps) {
             <span>{currentSection.description}</span>
           </div>
           <span className="local-data-status">
-            <i /> Datos guardados en este dispositivo
+            <i /> Datos sincronizados con tu cuenta
           </span>
         </div>
       </div>

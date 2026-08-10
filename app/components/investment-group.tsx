@@ -29,10 +29,10 @@ type InvestmentGroupProps = {
   empty: string;
   action: string;
   available: number;
-  onAction: (id: number) => boolean;
-  onEdit: (id: number, values: InvestmentValues) => boolean;
-  onRemove: (id: number) => void;
-  onDuplicate: (id: number) => boolean;
+  onAction: (id: string) => Promise<boolean>;
+  onEdit: (id: string, values: InvestmentValues) => Promise<boolean>;
+  onRemove: (id: string) => Promise<void>;
+  onDuplicate: (id: string) => Promise<boolean>;
   onError: (message: string) => void;
   credits: Credit[];
 };
@@ -51,7 +51,7 @@ export function InvestmentGroup({
   onError,
   credits,
 }: InvestmentGroupProps) {
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState(EMPTY_DRAFT);
   const [editAdditionalName, setEditAdditionalName] = useState("");
   const [editAdditionalAmount, setEditAdditionalAmount] = useState("");
@@ -62,15 +62,15 @@ export function InvestmentGroup({
   const [editAdditionalCapitalSource, setEditAdditionalCapitalSource] =
     useState<CapitalSource>("loan");
   const [editAdditionalCreditId, setEditAdditionalCreditId] = useState(
-    credits[0]?.id ?? 0,
+    credits[0]?.id ?? "",
   );
 
   function beginEdit(item: Investment) {
     const validItemCreditId = credits.some(
       (credit) => credit.id === item.creditId,
     )
-      ? (item.creditId as number)
-      : (credits[0]?.id ?? 0);
+      ? (item.creditId as string)
+      : (credits[0]?.id ?? "");
 
     setEditingId(item.id);
     setEditAdditionalName("");
@@ -92,7 +92,7 @@ export function InvestmentGroup({
     });
   }
 
-  function saveEdit(event: React.SubmitEvent<HTMLFormElement>, id: number) {
+  async function saveEdit(event: React.SubmitEvent<HTMLFormElement>, id: string) {
     event.preventDefault();
     const amount = Number(editDraft.amount);
     const salePricePen = Number(editDraft.salePricePen);
@@ -108,7 +108,7 @@ export function InvestmentGroup({
       return;
     }
 
-    const saved = onEdit(id, {
+    const saved = await onEdit(id, {
       name: editDraft.name.trim(),
       amount,
       salePricePen,
@@ -131,8 +131,8 @@ export function InvestmentGroup({
     setEditingId(null);
   }
 
-  function duplicate(id: number) {
-    const duplicated = onDuplicate(id);
+  async function duplicate(id: string) {
+    const duplicated = await onDuplicate(id);
     if (!duplicated) {
       onError(
         `No se puede duplicar: solo hay ${money.format(available)} disponibles.`,
@@ -140,8 +140,8 @@ export function InvestmentGroup({
     }
   }
 
-  function changeInvestmentStatus(id: number) {
-    const changed = onAction(id);
+  async function changeInvestmentStatus(id: string) {
+    const changed = await onAction(id);
     if (!changed) {
       onError(
         `No se puede reabrir: solo hay ${money.format(available)} disponibles.`,
@@ -158,7 +158,7 @@ export function InvestmentGroup({
     if (!editAdditionalName.trim() || amount <= 0 || exchangeRate <= 0) return;
 
     const additionalCost: AdditionalCost = {
-      id: Date.now(),
+      id: null,
       name: editAdditionalName.trim(),
       amount,
       currency: editAdditionalCurrency,
@@ -178,11 +178,11 @@ export function InvestmentGroup({
     setEditAdditionalExchangeRate("");
   }
 
-  function removeEditAdditionalCost(id: number) {
+  function removeEditAdditionalCost(index: number) {
     setEditDraft({
       ...editDraft,
       additionalCosts: editDraft.additionalCosts.filter(
-        (item) => item.id !== id,
+        (_, itemIndex) => itemIndex !== index,
       ),
     });
   }
@@ -241,7 +241,7 @@ export function InvestmentGroup({
                         onChange={(event) =>
                           setEditDraft({
                             ...editDraft,
-                            creditId: Number(event.target.value),
+                            creditId: event.target.value,
                           })
                         }
                       >
@@ -360,9 +360,7 @@ export function InvestmentGroup({
                           <select
                             value={editAdditionalCreditId}
                             onChange={(event) =>
-                              setEditAdditionalCreditId(
-                                Number(event.target.value),
-                              )
+                              setEditAdditionalCreditId(event.target.value)
                             }
                           >
                             {credits.map((credit) => (
@@ -408,8 +406,8 @@ export function InvestmentGroup({
                     </div>
                     {editDraft.additionalCosts.length > 0 && (
                       <div className="additional-costs-list">
-                        {editDraft.additionalCosts.map((additional) => (
-                          <span key={additional.id}>
+                        {editDraft.additionalCosts.map((additional, index) => (
+                          <span key={additional.id ?? `${additional.name}-${index}`}>
                             {additional.name} · {formatInvestmentAmount(additional.amount, additional.currency)} · {capitalSourceLabels[additional.capitalSource]}
                             {additional.capitalSource === "loan" && additional.creditId &&
                               ` (${credits.find((credit) => credit.id === additional.creditId)?.name ?? "Crédito eliminado"})`}
@@ -418,7 +416,7 @@ export function InvestmentGroup({
                               type="button"
                               aria-label={`Eliminar adicional ${additional.name}`}
                               onClick={() =>
-                                removeEditAdditionalCost(additional.id)
+                                removeEditAdditionalCost(index)
                               }
                             >
                               ×
@@ -518,7 +516,7 @@ export function InvestmentGroup({
                       <button
                         type="button"
                         className="duplicate-action"
-                        onClick={() => duplicate(item.id)}
+                        onClick={() => void duplicate(item.id)}
                       >
                         Duplicar
                       </button>
@@ -532,7 +530,7 @@ export function InvestmentGroup({
                       <button
                         type="button"
                         className="state-action"
-                        onClick={() => changeInvestmentStatus(item.id)}
+                        onClick={() => void changeInvestmentStatus(item.id)}
                       >
                         {action}
                       </button>

@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { financeApi, loadFinanceSnapshot } from "../api/finance";
+import type {
+  CapitalAccountResponse,
+  CapitalAccountType,
+  CreditInstallmentResponse,
+  FinanceSnapshot,
+} from "../api/contracts";
 import type {
   AdditionalCost,
   CapitalSource,
@@ -9,16 +16,12 @@ import type {
   InvestmentDraft,
   InvestmentStatus,
   InvestmentValues,
-  StoredData,
 } from "./types";
 import {
-  getInvestmentCostInSoles,
   getCreditFundedInvestmentCost,
+  getInvestmentCostInSoles,
   getLoanFundedInvestmentCost,
-  toSoles,
 } from "./format";
-
-const STORAGE_KEY = "flujo-finanzas-v2";
 
 export const EMPTY_DRAFT: InvestmentDraft = {
   name: "",
@@ -31,77 +34,17 @@ export const EMPTY_DRAFT: InvestmentDraft = {
   additionalCosts: [],
 };
 
-function createEmptyCredit(number: number, id = Date.now()): Credit {
-  return {
-    id,
-    name: `Crédito ${number}`,
-    loan: 0,
-    months: 0,
-    installments: 0,
-    payment: 0,
-    firstPaymentDate: "",
-    paidInstallments: [],
-  };
+function accountTypeToSource(type: CapitalAccountType): CapitalSource {
+  return type === "creditCard" ? "card" : type;
 }
 
-type PersistedAdditionalCost = Omit<
-  AdditionalCost,
-  "currency" | "exchangeRate" | "capitalSource"
-> & {
-  currency?: Currency;
-  exchangeRate?: number;
-  capitalSource?: CapitalSource;
-};
-
-type PersistedInvestment = Omit<
-  Investment,
-  | "salePricePen"
-  | "currency"
-  | "exchangeRate"
-  | "capitalSource"
-  | "additionalCosts"
-> & {
-  salePricePen?: number;
-  salePrice?: number;
-  profit?: number;
-  currency?: Currency;
-  exchangeRate?: number;
-  capitalSource?: CapitalSource;
-  additionalCosts?: PersistedAdditionalCost[];
-};
-
-type PersistedData = {
-  credits?: Credit[];
-  activeCreditId?: number;
-  investments?: PersistedInvestment[];
-  loan?: number;
-  months?: number;
-  installments?: number;
-  payment?: number;
-  firstPaymentDate?: string;
-  paidInstallments?: number[];
-};
-
-function readStoredData(): PersistedData | null {
-  const saved = window.localStorage.getItem(STORAGE_KEY);
-  if (!saved) return null;
-
-  try {
-    return JSON.parse(saved) as PersistedData;
-  } catch {
-    return null;
-  }
+function sourceToAccountType(source: CapitalSource): CapitalAccountType {
+  return source === "card" ? "creditCard" : source;
 }
 
 function getCreditTotals(credit: Credit) {
   const repayment = credit.installments * credit.payment;
-  const validPaidInstallments = new Set(
-    credit.paidInstallments.filter(
-      (installment) =>
-        installment >= 1 && installment <= credit.installments,
-    ),
-  );
-  const paidCount = validPaidInstallments.size;
+  const paidCount = new Set(credit.paidInstallments).size;
   const paidAmount = Math.min(repayment, paidCount * credit.payment);
 
   return {
@@ -112,164 +55,134 @@ function getCreditTotals(credit: Credit) {
     remainingLoan: Math.max(0, credit.loan - paidAmount),
     remainingInstallments: Math.max(0, credit.installments - paidCount),
     paymentProgress: repayment > 0 ? (paidAmount / repayment) * 100 : 0,
-    cost:
-      credit.loan > 0 && repayment > 0 ? repayment - credit.loan : 0,
+    cost: credit.loan > 0 && repayment > 0 ? repayment - credit.loan : 0,
   };
 }
 
-export function useFinanceDashboard() {
-  const initialCredit = useMemo(() => createEmptyCredit(1, 1), []);
-  const [credits, setCredits] = useState<Credit[]>([initialCredit]);
-  const [activeCreditId, setActiveCreditId] = useState(initialCredit.id);
-  const [investments, setInvestments] = useState<Investment[]>([]);
-  const [draft, setDraft] = useState<InvestmentDraft>(EMPTY_DRAFT);
-  const [isStorageReady, setIsStorageReady] = useState(false);
+function mapSnapshot(snapshot: FinanceSnapshot) {
+  const accounts = new Map(snapshot.capitalAccounts.map((account) => [account.id, account]));
+  const credits: Credit[] = snapshot.credits
+    .filter((credit) => credit.status !== "archived")
+    .map((credit) => ({
+      id: credit.id,
+      name: credit.name,
+      loan: credit.amount,
+      months: credit.numberOfInstallments,
+      installments: credit.numberOfInstallments,
+      payment: credit.installmentAmount,
+      firstPaymentDate: credit.firstDueDate,
+      paidInstallments: (snapshot.installmentsByCreditId[credit.id] ?? [])
+        .filter((installment) => installment.status === "paid")
+        .map((installment) => installment.number),
+    }));
 
-  const activeCredit =
-    credits.find((credit) => credit.id === activeCreditId) ?? credits[0];
+  const investments: Investment[] = snapshot.investments
+    .filter((investment) => investment.status !== "archived")
+    .map((investment) => {
+      const account = accounts.get(investment.capitalAccountId);
+      if (!account)
+        throw new Error(`No se encontró la cuenta de capital de la inversión ${investment.id}.`);
+      const additionalCosts: AdditionalCost[] = (
+        snapshot.additionalCostsByInvestmentId[investment.id] ?? []
+      ).map((cost) => {
+        const costAccount = accounts.get(cost.capitalAccountId);
+        if (!costAccount)
+          throw new Error(`No se encontró la cuenta de capital del costo ${cost.id}.`);
+        return {
+          id: cost.id,
+          capitalAccountId: cost.capitalAccountId,
+          name: cost.description,
+          amount: cost.originalAmount,
+          currency: cost.currency,
+          exchangeRate: cost.exchangeRate,
+          capitalSource: accountTypeToSource(costAccount.type),
+          creditId: cost.creditId ?? undefined,
+        };
+      });
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const data = readStoredData();
-      if (data) {
-        const storedCredits = data.credits?.length
-          ? data.credits.map((credit, index) => ({
-              ...createEmptyCredit(index + 1, credit.id),
-              ...credit,
-              name: credit.name?.trim() || `Crédito ${index + 1}`,
-              paidInstallments: credit.paidInstallments ?? [],
-            }))
-          : [
-              {
-                ...createEmptyCredit(1, 1),
-                loan: data.loan ?? 0,
-                months: data.months ?? 0,
-                installments: data.installments ?? 0,
-                payment: data.payment ?? 0,
-                firstPaymentDate: data.firstPaymentDate ?? "",
-                paidInstallments: data.paidInstallments ?? [],
-              },
-            ];
-
-        const validCreditIds = new Set(
-          storedCredits.map((credit) => credit.id),
-        );
-        const fallbackCreditId = storedCredits[0].id;
-        const storedInvestments = (data.investments ?? []).map((item) => {
-          const currency = item.currency ?? "PEN";
-          const exchangeRate =
-            currency === "USD" ? (item.exchangeRate ?? 1) : 1;
-          const legacySalePrice =
-            item.salePrice ?? item.amount + (item.profit ?? 0);
-          const capitalSource = item.capitalSource ?? "loan";
-          const creditId =
-            capitalSource === "loan"
-              ? validCreditIds.has(item.creditId ?? -1)
-                ? item.creditId
-                : fallbackCreditId
-              : undefined;
-          const additionalCosts = (item.additionalCosts ?? []).map(
-            (additional) => {
-              const additionalCurrency = additional.currency ?? "PEN";
-              const additionalCapitalSource =
-                additional.capitalSource ?? capitalSource;
-              return {
-                ...additional,
-                currency: additionalCurrency,
-                exchangeRate:
-                  additionalCurrency === "USD"
-                    ? (additional.exchangeRate ?? 1)
-                    : 1,
-                capitalSource: additionalCapitalSource,
-                creditId:
-                  additionalCapitalSource === "loan"
-                    ? validCreditIds.has(additional.creditId ?? -1)
-                      ? additional.creditId
-                      : (creditId ?? fallbackCreditId)
-                    : undefined,
-              };
-            },
-          );
-
-          return {
-            ...item,
-            status: item.status ?? "open",
-            salePricePen:
-              item.salePricePen ??
-              toSoles(legacySalePrice, currency, exchangeRate),
-            currency,
-            exchangeRate,
-            capitalSource,
-            creditId,
-            additionalCosts,
-          };
-        });
-        const repairedCredits = storedCredits.map((credit) => {
-          const committedCapital = storedInvestments
-            .filter((investment) => investment.status === "open")
-            .reduce(
-              (sum, investment) =>
-                sum + getCreditFundedInvestmentCost(investment, credit.id),
-              0,
-            );
-          return credit.loan + 0.005 < committedCapital
-            ? { ...credit, loan: committedCapital }
-            : credit;
-        });
-
-        setCredits(repairedCredits);
-        setActiveCreditId(
-          repairedCredits.some((credit) => credit.id === data.activeCreditId)
-            ? (data.activeCreditId as number)
-            : repairedCredits[0].id,
-        );
-        setInvestments(storedInvestments);
-      }
-      setIsStorageReady(true);
+      return {
+        id: investment.id,
+        capitalAccountId: investment.capitalAccountId,
+        name: investment.name,
+        amount: investment.originalAmount,
+        salePricePen: investment.projectedSalePrice,
+        currency: investment.currency,
+        exchangeRate: investment.exchangeRate,
+        capitalSource: accountTypeToSource(account.type),
+        creditId: investment.creditId ?? undefined,
+        additionalCosts,
+        status: investment.status === "closed" ? "closed" : "open",
+      };
     });
 
-    return () => window.cancelAnimationFrame(frame);
+  return { credits, investments };
+}
+
+export function useFinanceDashboard() {
+  const [credits, setCredits] = useState<Credit[]>([]);
+  const [activeCreditId, setActiveCreditId] = useState<string | null>(null);
+  const [investments, setInvestments] = useState<Investment[]>([]);
+  const capitalAccountsRef = useRef<CapitalAccountResponse[]>([]);
+  const [installmentsByCreditId, setInstallmentsByCreditId] = useState<Record<string, CreditInstallmentResponse[]>>({});
+  const [draft, setDraft] = useState<InvestmentDraft>(EMPTY_DRAFT);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [isMutating, setIsMutating] = useState(false);
+  const [error, setError] = useState("");
+
+  function reportMutationError(caught: unknown, fallback: string) {
+    if (caught instanceof TypeError) setHasLoaded(false);
+    setError(caught instanceof Error ? caught.message : fallback);
+  }
+
+  const refresh = useCallback(async () => {
+    setError("");
+    try {
+      const snapshot = await loadFinanceSnapshot();
+      const mapped = mapSnapshot(snapshot);
+      setCredits(mapped.credits);
+      setInvestments(mapped.investments);
+      const activeAccounts = snapshot.capitalAccounts.filter((account) => account.isActive);
+      capitalAccountsRef.current = activeAccounts;
+      setInstallmentsByCreditId(snapshot.installmentsByCreditId);
+      setHasLoaded(true);
+      setActiveCreditId((current) =>
+        current && mapped.credits.some((credit) => credit.id === current)
+          ? current
+          : mapped.credits[0]?.id ?? null,
+      );
+    } catch (caught) {
+      setHasLoaded(false);
+      setError(caught instanceof Error ? caught.message : "No se pudieron cargar tus datos financieros.");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (!isStorageReady) return;
+    const frame = window.requestAnimationFrame(() => {
+      void refresh();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [refresh]);
 
-    const data: StoredData = { credits, activeCreditId, investments };
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [activeCreditId, credits, investments, isStorageReady]);
-
+  const activeCredit = credits.find((credit) => credit.id === activeCreditId) ?? null;
   const activeCreditTotals = useMemo(
-    () => getCreditTotals(activeCredit),
+    () => activeCredit ? getCreditTotals(activeCredit) : {
+      repayment: 0,
+      paidCount: 0,
+      paidAmount: 0,
+      remainingRepayment: 0,
+      remainingLoan: 0,
+      remainingInstallments: 0,
+      paymentProgress: 0,
+      cost: 0,
+    },
     [activeCredit],
   );
 
-  function getAttributedCreditCost(
-    investment: InvestmentValues,
-    creditId: number,
-  ) {
-    const validCreditIds = new Set(credits.map((credit) => credit.id));
-    const fallbackCreditId = credits[0].id;
-    return getCreditFundedInvestmentCost(
-      {
-        ...investment,
-        creditId:
-          investment.capitalSource === "loan"
-            ? validCreditIds.has(investment.creditId ?? -1)
-              ? investment.creditId
-              : fallbackCreditId
-            : undefined,
-        additionalCosts: investment.additionalCosts.map((additional) => ({
-          ...additional,
-          creditId:
-            additional.capitalSource === "loan"
-              ? validCreditIds.has(additional.creditId ?? -1)
-                ? additional.creditId
-                : fallbackCreditId
-              : undefined,
-        })),
-      },
-      creditId,
-    );
+  function getAttributedCreditCost(investment: InvestmentValues, creditId: string) {
+    return getCreditFundedInvestmentCost(investment, creditId);
   }
 
   const creditCommitments = Object.fromEntries(
@@ -277,91 +190,42 @@ export function useFinanceDashboard() {
       credit.id,
       investments
         .filter((investment) => investment.status === "open")
-        .reduce(
-          (sum, investment) =>
-            sum + getAttributedCreditCost(investment, credit.id),
-          0,
-        ),
+        .reduce((sum, investment) => sum + getAttributedCreditCost(investment, credit.id), 0),
     ]),
-  ) as Record<number, number>;
+  ) as Record<string, number>;
 
-  function canFundInvestment(
-    investment: InvestmentValues,
-    excludedInvestmentId?: number,
-  ) {
+  function canFundInvestment(investment: InvestmentValues, excludedInvestmentId?: string) {
     return credits.every((credit) => {
-      const usedCapital = investments
-        .filter(
-          (item) =>
-            item.status === "open" && item.id !== excludedInvestmentId,
-        )
-        .reduce(
-          (sum, item) =>
-            sum + getAttributedCreditCost(item, credit.id),
-          0,
-        );
-      const paidAmount = getCreditTotals(credit).paidAmount;
-      const availableCapital = Math.max(0, credit.loan - paidAmount - usedCapital);
-      return (
-        getAttributedCreditCost(investment, credit.id) <=
-        availableCapital + 0.005
-      );
+      const used = investments
+        .filter((item) => item.status === "open" && item.id !== excludedInvestmentId)
+        .reduce((sum, item) => sum + getAttributedCreditCost(item, credit.id), 0);
+      const available = Math.max(0, credit.loan - getCreditTotals(credit).paidAmount - used);
+      return getAttributedCreditCost(investment, credit.id) <= available + 0.005;
     });
   }
 
   const totals = useMemo(() => {
     const open = investments.filter((item) => item.status === "open");
     const closed = investments.filter((item) => item.status === "closed");
-    const openCapital = open.reduce(
-      (sum, item) => sum + getInvestmentCostInSoles(item),
-      0,
-    );
-    const invested = open.reduce(
-      (sum, item) => sum + getLoanFundedInvestmentCost(item),
-      0,
-    );
+    const openCapital = open.reduce((sum, item) => sum + getInvestmentCostInSoles(item), 0);
+    const invested = open.reduce((sum, item) => sum + getLoanFundedInvestmentCost(item), 0);
     const projectedProfit = open.reduce(
-      (sum, item) =>
-        sum + item.salePricePen - getInvestmentCostInSoles(item),
+      (sum, item) => sum + item.salePricePen - getInvestmentCostInSoles(item),
       0,
     );
     const currentBalance = closed.reduce(
-      (sum, item) =>
-        sum + item.salePricePen - getInvestmentCostInSoles(item),
+      (sum, item) => sum + item.salePricePen - getInvestmentCostInSoles(item),
       0,
     );
     const creditTotals = credits.map(getCreditTotals);
     const totalLoan = credits.reduce((sum, credit) => sum + credit.loan, 0);
-    const repayment = creditTotals.reduce(
-      (sum, credit) => sum + credit.repayment,
-      0,
-    );
-    const paidAmount = creditTotals.reduce(
-      (sum, credit) => sum + credit.paidAmount,
-      0,
-    );
-    const paidCount = creditTotals.reduce(
-      (sum, credit) => sum + credit.paidCount,
-      0,
-    );
-    const remainingRepayment = creditTotals.reduce(
-      (sum, credit) => sum + credit.remainingRepayment,
-      0,
-    );
-    const remainingLoan = creditTotals.reduce(
-      (sum, credit) => sum + credit.remainingLoan,
-      0,
-    );
-    const remainingInstallments = creditTotals.reduce(
-      (sum, credit) => sum + credit.remainingInstallments,
-      0,
-    );
-    const totalInstallments = credits.reduce(
-      (sum, credit) => sum + credit.installments,
-      0,
-    );
-    const paymentProgress =
-      repayment > 0 ? (paidAmount / repayment) * 100 : 0;
+    const repayment = creditTotals.reduce((sum, credit) => sum + credit.repayment, 0);
+    const paidAmount = creditTotals.reduce((sum, credit) => sum + credit.paidAmount, 0);
+    const paidCount = creditTotals.reduce((sum, credit) => sum + credit.paidCount, 0);
+    const remainingRepayment = creditTotals.reduce((sum, credit) => sum + credit.remainingRepayment, 0);
+    const remainingLoan = creditTotals.reduce((sum, credit) => sum + credit.remainingLoan, 0);
+    const remainingInstallments = creditTotals.reduce((sum, credit) => sum + credit.remainingInstallments, 0);
+    const totalInstallments = credits.reduce((sum, credit) => sum + credit.installments, 0);
     const totalCapital = totalLoan + currentBalance - paidAmount;
 
     return {
@@ -380,86 +244,128 @@ export function useFinanceDashboard() {
       remainingRepayment,
       remainingLoan,
       remainingInstallments,
-      paymentProgress,
+      paymentProgress: repayment > 0 ? (paidAmount / repayment) * 100 : 0,
       available: totalCapital - invested,
-      cost: credits.reduce(
-        (sum, credit) => sum + getCreditTotals(credit).cost,
-        0,
-      ),
+      cost: creditTotals.reduce((sum, credit) => sum + credit.cost, 0),
     };
   }, [credits, investments]);
 
-  const paymentSchedule = useMemo(() => {
-    if (
-      !activeCredit.firstPaymentDate ||
-      activeCredit.installments <= 0 ||
-      activeCredit.payment <= 0
-    ) {
-      return [];
-    }
+  const paymentSchedule = useMemo(
+    () => (activeCredit ? installmentsByCreditId[activeCredit.id] ?? [] : []).map((installment) => ({
+      id: installment.id,
+      number: installment.number,
+      date: new Date(`${installment.dueDate}T00:00:00`),
+      amount: installment.amount,
+    })),
+    [activeCredit, installmentsByCreditId],
+  );
 
-    const [year, month, day] = activeCredit.firstPaymentDate
-      .split("-")
-      .map(Number);
-    if (!year || !month || !day) return [];
-
-    return Array.from({ length: activeCredit.installments }, (_, index) => {
-      const targetMonth = month - 1 + index;
-      const lastDay = new Date(year, targetMonth + 1, 0).getDate();
-      return {
-        number: index + 1,
-        date: new Date(year, targetMonth, Math.min(day, lastDay)),
-        amount: activeCredit.payment,
+  async function saveCredit(id: string | null, changes: CreditChanges) {
+    const committed = id ? creditCommitments[id] ?? 0 : 0;
+    if (changes.loan + 0.005 < committed) return false;
+    setIsMutating(true);
+    setError("");
+    try {
+      const request = {
+        name: changes.name.trim(),
+        amount: changes.loan,
+        numberOfInstallments: changes.installments,
+        installmentAmount: changes.payment,
+        firstDueDate: changes.firstPaymentDate,
       };
+      if (id === null) await financeApi.createCredit(request);
+      else await financeApi.updateCredit(id, request);
+      await refresh();
+      return true;
+    } catch (caught) {
+      reportMutationError(caught, "No se pudo guardar el crédito.");
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function removeCredit(id: string) {
+    if ((creditCommitments[id] ?? 0) > 0.005) return "has-open-investments" as const;
+    setIsMutating(true);
+    try {
+      await financeApi.archiveCredit(id);
+      await refresh();
+      return "deleted" as const;
+    } catch (caught) {
+      reportMutationError(caught, "No se pudo archivar el crédito.");
+      return "failed" as const;
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function ensureCapitalAccount(
+    source: CapitalSource,
+    currency: Currency,
+    creditId?: string,
+  ) {
+    const type = sourceToAccountType(source);
+    const normalizedCreditId = source === "loan" ? creditId ?? null : null;
+    const existing = capitalAccountsRef.current.find(
+      (account) =>
+        account.type === type &&
+        account.currency === currency &&
+        account.creditId === normalizedCreditId &&
+        account.isActive,
+    );
+    if (existing) return existing.id;
+
+    const credit = credits.find((item) => item.id === creditId);
+    if (source === "loan" && !credit)
+      throw new Error("El crédito asociado no existe en el backend.");
+    const labels: Record<CapitalSource, string> = {
+      loan: `Préstamo ${credit?.name}`,
+      card: `Tarjeta en ${currency}`,
+      savings: `Ahorros en ${currency}`,
+      person: `Dinero personal en ${currency}`,
+    };
+    const id = await financeApi.createCapitalAccount({
+      name: labels[source],
+      type,
+      currency,
+      creditId: normalizedCreditId,
     });
-  }, [activeCredit]);
-
-  function updateActiveCredit<K extends keyof Credit>(
-    field: K,
-    value: Credit[K],
-  ) {
-    setCredits((current) =>
-      current.map((credit) =>
-        credit.id === activeCredit.id ? { ...credit, [field]: value } : credit,
-      ),
-    );
+    const createdAccount = await financeApi.getCapitalAccount(id);
+    capitalAccountsRef.current = [...capitalAccountsRef.current, createdAccount];
+    return id;
   }
 
-  function addCredit() {
-    const existingNames = new Set(credits.map((credit) => credit.name));
-    let number = credits.length + 1;
-    while (existingNames.has(`Crédito ${number}`)) number += 1;
-    const nextId = Math.max(
-      Date.now(),
-      ...credits.map((credit) => credit.id + 1),
-    );
-    const newCredit = createEmptyCredit(number, nextId);
-    setCredits((current) => [...current, newCredit]);
-    setActiveCreditId(nextId);
-    return newCredit;
-  }
-
-  function updateDraft<K extends keyof InvestmentDraft>(
-    field: K,
-    value: InvestmentDraft[K],
-  ) {
+  function updateDraft<K extends keyof InvestmentDraft>(field: K, value: InvestmentDraft[K]) {
     setDraft((current) => ({ ...current, [field]: value }));
   }
 
-  function addInvestment() {
+  async function persistAdditionalCosts(investmentId: string, costs: AdditionalCost[]) {
+    for (const cost of costs) {
+      const accountId = await ensureCapitalAccount(
+        cost.capitalSource,
+        cost.currency,
+        cost.capitalSource === "loan" ? cost.creditId : undefined,
+      );
+      const request = {
+        investmentId,
+        capitalAccountId: accountId,
+        creditId: cost.capitalSource === "loan" ? cost.creditId ?? null : null,
+        description: cost.name,
+        originalAmount: cost.amount,
+        currency: cost.currency,
+        exchangeRate: cost.currency === "USD" ? cost.exchangeRate : 1,
+      };
+      if (cost.id === null) await financeApi.createAdditionalCost(request);
+      else await financeApi.updateAdditionalCost(cost.id, request);
+    }
+  }
+
+  async function addInvestment() {
     const amount = Number(draft.amount);
     const salePricePen = Number(draft.salePricePen);
-    const exchangeRate =
-      draft.currency === "USD" ? Number(draft.exchangeRate) : 1;
-    if (
-      !draft.name.trim() ||
-      amount <= 0 ||
-      salePricePen <= 0 ||
-      exchangeRate <= 0
-    ) {
-      return false;
-    }
-
+    const exchangeRate = draft.currency === "USD" ? Number(draft.exchangeRate) : 1;
+    if (!draft.name.trim() || amount <= 0 || salePricePen <= 0 || exchangeRate <= 0) return false;
     const values: InvestmentValues = {
       name: draft.name.trim(),
       amount,
@@ -467,145 +373,151 @@ export function useFinanceDashboard() {
       currency: draft.currency,
       exchangeRate,
       capitalSource: draft.capitalSource,
-      creditId:
-        draft.capitalSource === "loan"
-          ? (draft.creditId ?? activeCreditId)
-          : undefined,
+      creditId: draft.capitalSource === "loan" ? draft.creditId ?? activeCreditId ?? undefined : undefined,
       additionalCosts: draft.additionalCosts,
     };
+    if (values.capitalSource === "loan" && !values.creditId) return false;
+    if (values.additionalCosts.some((cost) => cost.capitalSource === "loan" && !cost.creditId)) return false;
     if (!canFundInvestment(values)) return false;
 
-    setInvestments((items) => [
-      ...items,
-      {
-        id: Date.now(),
-        ...values,
-        status: "open",
-      },
-    ]);
-    setDraft(EMPTY_DRAFT);
-    return true;
+    setIsMutating(true);
+    try {
+      const accountId = await ensureCapitalAccount(values.capitalSource, values.currency, values.creditId);
+      const id = await financeApi.createInvestment({
+        capitalAccountId: accountId,
+        creditId: values.capitalSource === "loan" ? values.creditId ?? null : null,
+        name: values.name,
+        originalAmount: values.amount,
+        currency: values.currency,
+        exchangeRate: values.currency === "USD" ? values.exchangeRate : 1,
+        projectedSalePrice: values.salePricePen,
+      });
+      await persistAdditionalCosts(id, values.additionalCosts);
+      setDraft(EMPTY_DRAFT);
+      await refresh();
+      return true;
+    } catch (caught) {
+      reportMutationError(caught, "No se pudo registrar la inversión.");
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
   }
 
-  function changeStatus(id: number, status: InvestmentStatus) {
+  async function changeStatus(id: string, status: InvestmentStatus) {
     const investment = investments.find((item) => item.id === id);
-    if (!investment) return false;
-    if (status === "open" && !canFundInvestment(investment)) {
+    if (!investment || (status === "open" && !canFundInvestment(investment))) return false;
+    setIsMutating(true);
+    try {
+      if (status === "closed") await financeApi.closeInvestment(id);
+      else await financeApi.reopenInvestment(id);
+      await refresh();
+      return true;
+    } catch (caught) {
+      reportMutationError(caught, "No se pudo cambiar el estado.");
       return false;
+    } finally {
+      setIsMutating(false);
     }
-
-    setInvestments((items) =>
-      items.map((item) => (item.id === id ? { ...item, status } : item)),
-    );
-    return true;
   }
 
-  function editInvestment(id: number, values: InvestmentValues) {
+  async function editInvestment(id: string, values: InvestmentValues) {
     const current = investments.find((item) => item.id === id);
-    if (!current) return false;
-
-    if (
-      current.status === "open" &&
-      !canFundInvestment(values, current.id)
-    ) {
+    if (!current || (current.status === "open" && !canFundInvestment(values, id))) return false;
+    setIsMutating(true);
+    try {
+      const accountId = await ensureCapitalAccount(values.capitalSource, values.currency, values.creditId);
+      await financeApi.updateInvestment(id, {
+        capitalAccountId: accountId,
+        creditId: values.capitalSource === "loan" ? values.creditId ?? null : null,
+        name: values.name,
+        originalAmount: values.amount,
+        currency: values.currency,
+        exchangeRate: values.currency === "USD" ? values.exchangeRate : 1,
+        projectedSalePrice: values.salePricePen,
+      });
+      const retainedCostIds = new Set(
+        values.additionalCosts.flatMap((cost) => cost.id ? [cost.id] : []),
+      );
+      const removedCosts = current.additionalCosts.filter(
+        (cost) => cost.id !== null && !retainedCostIds.has(cost.id),
+      );
+      await Promise.all(
+        removedCosts.flatMap((cost) =>
+          cost.id ? [financeApi.archiveAdditionalCost(cost.id)] : [],
+        ),
+      );
+      await persistAdditionalCosts(id, values.additionalCosts);
+      await refresh();
+      return true;
+    } catch (caught) {
+      reportMutationError(caught, "No se pudo actualizar la inversión.");
       return false;
+    } finally {
+      setIsMutating(false);
     }
-
-    setInvestments((items) =>
-      items.map((item) => (item.id === id ? { ...item, ...values } : item)),
-    );
-    return true;
   }
 
-  function removeInvestment(id: number) {
-    setInvestments((items) => items.filter((item) => item.id !== id));
+  async function removeInvestment(id: string) {
+    setIsMutating(true);
+    try {
+      await financeApi.archiveInvestment(id);
+      await refresh();
+    } catch (caught) {
+      reportMutationError(caught, "No se pudo archivar la inversión.");
+    } finally {
+      setIsMutating(false);
+    }
   }
 
-  function duplicateInvestment(id: number) {
+  async function duplicateInvestment(id: string) {
     const source = investments.find((item) => item.id === id);
-    if (!source) return false;
-    if (!canFundInvestment(source)) {
+    if (!source || !canFundInvestment(source)) return false;
+    setIsMutating(true);
+    try {
+      const accountId = await ensureCapitalAccount(
+        source.capitalSource,
+        source.currency,
+        source.creditId,
+      );
+      const newId = await financeApi.createInvestment({
+        capitalAccountId: accountId,
+        creditId: source.capitalSource === "loan" ? source.creditId ?? null : null,
+        name: `${source.name} (copia)`,
+        originalAmount: source.amount,
+        currency: source.currency,
+        exchangeRate: source.currency === "USD" ? source.exchangeRate : 1,
+        projectedSalePrice: source.salePricePen,
+      });
+      await persistAdditionalCosts(
+        newId,
+        source.additionalCosts.map((cost) => ({ ...cost, id: null })),
+      );
+      await refresh();
+      return true;
+    } catch (caught) {
+      reportMutationError(caught, "No se pudo duplicar la inversión.");
       return false;
+    } finally {
+      setIsMutating(false);
     }
-
-    setInvestments((items) => {
-      const nextId = Math.max(Date.now(), ...items.map((item) => item.id + 1));
-      const baseName = source.name.replace(/\s+\(\d+\)$/, "");
-      const existingNames = new Set(items.map((item) => item.name));
-      let duplicateNumber = 1;
-      while (existingNames.has(`${baseName} (${duplicateNumber})`)) {
-        duplicateNumber += 1;
-      }
-
-      return [
-        ...items,
-        {
-          ...source,
-          id: nextId,
-          name: `${baseName} (${duplicateNumber})`,
-          status: "open",
-          additionalCosts: source.additionalCosts.map((item) => ({ ...item })),
-        },
-      ];
-    });
-    return true;
   }
 
-  function toggleInstallmentPaid(installment: number) {
-    updateActiveCredit(
-      "paidInstallments",
-      activeCredit.paidInstallments.includes(installment)
-        ? activeCredit.paidInstallments.filter((item) => item !== installment)
-        : [...activeCredit.paidInstallments, installment].sort((a, b) => a - b),
+  async function toggleInstallmentPaid(number: number) {
+    if (!activeCredit) return;
+    const installment = (installmentsByCreditId[activeCredit.id] ?? []).find(
+      (item) => item.number === number,
     );
-  }
-
-  function setActiveCreditLoan(value: number) {
-    const committedCapital = creditCommitments[activeCredit.id] ?? 0;
-    if (value + 0.005 < committedCapital) return false;
-    updateActiveCredit("loan", value);
-    return true;
-  }
-
-  function saveCredit(id: number, changes: CreditChanges) {
-    const committedCapital = creditCommitments[id] ?? 0;
-    if (changes.loan + 0.005 < committedCapital) return false;
-
-    setCredits((current) =>
-      current.map((credit) =>
-        credit.id === id
-          ? {
-              ...credit,
-              ...changes,
-              name: changes.name.trim() || credit.name,
-            }
-          : credit,
-      ),
-    );
-    return true;
-  }
-
-  function removeCredit(id: number) {
-    const hasOpenInvestment = investments.some(
-      (investment) =>
-        investment.status === "open" &&
-        getAttributedCreditCost(investment, id) > 0.005,
-    );
-    if (hasOpenInvestment) {
-      return "has-open-investments" as const;
+    if (!installment || installment.status === "paid") return;
+    setIsMutating(true);
+    try {
+      await financeApi.payInstallment(installment.id, installment.amount - installment.paidAmount);
+      await refresh();
+    } catch (caught) {
+      reportMutationError(caught, "No se pudo registrar el pago.");
+    } finally {
+      setIsMutating(false);
     }
-    if (credits.length === 1) {
-      const replacementId = Math.max(Date.now(), id + 1);
-      const replacement = createEmptyCredit(1, replacementId);
-      setCredits([replacement]);
-      setActiveCreditId(replacementId);
-      return "deleted" as const;
-    }
-
-    const remainingCredits = credits.filter((credit) => credit.id !== id);
-    setCredits(remainingCredits);
-    if (activeCreditId === id) setActiveCreditId(remainingCredits[0].id);
-    return "deleted" as const;
   }
 
   return {
@@ -614,40 +526,28 @@ export function useFinanceDashboard() {
     activeCreditId,
     activeCreditTotals,
     creditCommitments,
-    creditCount: credits.filter((credit) => credit.loan > 0).length,
-    loan: activeCredit.loan,
-    months: activeCredit.months,
-    installments: activeCredit.installments,
-    payment: activeCredit.payment,
-    firstPaymentDate: activeCredit.firstPaymentDate,
-    paidInstallments: activeCredit.paidInstallments,
+    creditCount: credits.length,
+    loan: activeCredit?.loan ?? 0,
+    months: activeCredit?.months ?? 0,
+    installments: activeCredit?.installments ?? 0,
+    payment: activeCredit?.payment ?? 0,
+    firstPaymentDate: activeCredit?.firstPaymentDate ?? "",
+    paidInstallments: activeCredit?.paidInstallments ?? [],
     investments,
     draft,
     totals,
     paymentSchedule,
-    availablePercentage:
-      totals.totalCapital > 0
-        ? Math.max(0, (totals.available / totals.totalCapital) * 100)
-        : 0,
-    investedPercentage:
-      totals.totalCapital > 0
-        ? Math.min(100, Math.max(0, (totals.invested / totals.totalCapital) * 100))
-        : 0,
-    expectedReturn: totals.openCapital
-      ? (totals.projectedProfit / totals.openCapital) * 100
-      : 0,
+    isLoading,
+    hasLoaded,
+    isMutating,
+    error,
+    refresh,
+    availablePercentage: totals.totalCapital > 0 ? Math.max(0, (totals.available / totals.totalCapital) * 100) : 0,
+    investedPercentage: totals.totalCapital > 0 ? Math.min(100, Math.max(0, (totals.invested / totals.totalCapital) * 100)) : 0,
+    expectedReturn: totals.openCapital ? (totals.projectedProfit / totals.openCapital) * 100 : 0,
     setActiveCreditId,
-    addCredit,
     saveCredit,
     removeCredit,
-    setCreditName: (value: string) => updateActiveCredit("name", value),
-    setLoan: setActiveCreditLoan,
-    setMonths: (value: number) => updateActiveCredit("months", value),
-    setInstallments: (value: number) =>
-      updateActiveCredit("installments", value),
-    setPayment: (value: number) => updateActiveCredit("payment", value),
-    setFirstPaymentDate: (value: string) =>
-      updateActiveCredit("firstPaymentDate", value),
     updateDraft,
     addInvestment,
     changeStatus,

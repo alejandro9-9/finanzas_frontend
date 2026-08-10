@@ -24,7 +24,7 @@ const capitalSourceLabels: Record<CapitalSource, string> = {
 
 type InvestmentsPanelProps = {
   credits: Credit[];
-  activeCreditId: number;
+  activeCreditId: string | null;
   investments: Investment[];
   open: Investment[];
   closed: Investment[];
@@ -34,12 +34,12 @@ type InvestmentsPanelProps = {
     field: K,
     value: InvestmentDraft[K],
   ) => void;
-  onAdd: () => boolean;
-  onClose: (id: number) => boolean;
-  onReopen: (id: number) => boolean;
-  onEdit: (id: number, values: InvestmentValues) => boolean;
-  onRemove: (id: number) => void;
-  onDuplicate: (id: number) => boolean;
+  onAdd: () => Promise<boolean>;
+  onClose: (id: string) => Promise<boolean>;
+  onReopen: (id: string) => Promise<boolean>;
+  onEdit: (id: string, values: InvestmentValues) => Promise<boolean>;
+  onRemove: (id: string) => Promise<void>;
+  onDuplicate: (id: string) => Promise<boolean>;
 };
 
 export function InvestmentsPanel({
@@ -67,7 +67,7 @@ export function InvestmentsPanel({
   const [additionalCapitalSource, setAdditionalCapitalSource] =
     useState<CapitalSource>("loan");
   const [additionalCreditId, setAdditionalCreditId] =
-    useState(activeCreditId);
+    useState(activeCreditId ?? "");
 
   useEffect(() => {
     if (!popupMessage) return;
@@ -80,7 +80,7 @@ export function InvestmentsPanel({
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [popupMessage]);
 
-  function submitInvestment(event: React.SubmitEvent<HTMLFormElement>) {
+  async function submitInvestment(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const amount = Number(draft.amount);
     const salePricePen = Number(draft.salePricePen);
@@ -96,7 +96,7 @@ export function InvestmentsPanel({
       return;
     }
 
-    const added = onAdd();
+    const added = await onAdd();
     if (!added) {
       setPopupMessage(
         `No se puede usar más capital del préstamo. Disponible: ${money.format(available)}.`,
@@ -111,7 +111,7 @@ export function InvestmentsPanel({
     if (!additionalName.trim() || amount <= 0 || exchangeRate <= 0) return;
 
     const additionalCost: AdditionalCost = {
-      id: Date.now(),
+      id: null,
       name: additionalName.trim(),
       amount,
       currency: additionalCurrency,
@@ -129,10 +129,10 @@ export function InvestmentsPanel({
     setAdditionalExchangeRate("");
   }
 
-  function removeAdditionalCost(id: number) {
+  function removeAdditionalCost(index: number) {
     onDraftChange(
       "additionalCosts",
-      draft.additionalCosts.filter((item) => item.id !== id),
+      draft.additionalCosts.filter((_, itemIndex) => itemIndex !== index),
     );
   }
 
@@ -162,7 +162,7 @@ export function InvestmentsPanel({
               {
                 const capitalSource = event.target.value as CapitalSource;
                 onDraftChange("capitalSource", capitalSource);
-                if (capitalSource === "loan" && !draft.creditId) {
+                if (capitalSource === "loan" && !draft.creditId && activeCreditId) {
                   onDraftChange("creditId", activeCreditId);
                 }
               }
@@ -176,9 +176,9 @@ export function InvestmentsPanel({
           {draft.capitalSource === "loan" && (
             <select
               aria-label="Crédito que financia la inversión"
-              value={draft.creditId ?? activeCreditId}
+              value={draft.creditId ?? activeCreditId ?? ""}
               onChange={(event) =>
-                onDraftChange("creditId", Number(event.target.value))
+                onDraftChange("creditId", event.target.value)
               }
             >
               {credits.map((credit) => (
@@ -273,7 +273,7 @@ export function InvestmentsPanel({
                 <select
                   value={additionalCreditId}
                   onChange={(event) =>
-                    setAdditionalCreditId(Number(event.target.value))
+                    setAdditionalCreditId(event.target.value)
                   }
                 >
                   {credits.map((credit) => (
@@ -317,8 +317,8 @@ export function InvestmentsPanel({
           </div>
           {draft.additionalCosts.length > 0 && (
             <div className="additional-costs-list">
-              {draft.additionalCosts.map((item) => (
-                <span key={item.id}>
+              {draft.additionalCosts.map((item, index) => (
+                <span key={`${item.name}-${index}`}>
                   {item.name} · {formatInvestmentAmount(item.amount, item.currency)} · {capitalSourceLabels[item.capitalSource]}
                   {item.capitalSource === "loan" && item.creditId &&
                     ` (${credits.find((credit) => credit.id === item.creditId)?.name ?? "Crédito eliminado"})`}
@@ -326,7 +326,7 @@ export function InvestmentsPanel({
                   <button
                     type="button"
                     aria-label={`Eliminar adicional ${item.name}`}
-                    onClick={() => removeAdditionalCost(item.id)}
+                    onClick={() => removeAdditionalCost(index)}
                   >
                     ×
                   </button>

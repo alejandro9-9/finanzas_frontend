@@ -1,5 +1,19 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {};
+const backendApiUrl = process.env.BACKEND_API_URL?.replace(/\/$/, "");
+
+const nextConfig: NextConfig = {
+  agentRules: false,
+  async rewrites() {
+    if (!backendApiUrl) return [];
+
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${backendApiUrl}/api/:path*`,
+      },
+    ];
+  },
+};
 
 export default nextConfig;

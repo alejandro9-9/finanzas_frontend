@@ -30,6 +30,8 @@ export const financeApi = {
   payInstallment: (id: string, amount: number) =>
     apiRequest<string>(`/api/creditinstallments/${id}/payments`, { method: "POST", ...json({ amount }) }),
   getCapitalAccounts: () => apiRequest<CapitalAccountResponse[]>("/api/capitalaccounts"),
+  getCapitalAccount: (id: string) =>
+    apiRequest<CapitalAccountResponse>(`/api/capitalaccounts/${id}`),
   createCapitalAccount: (request: SaveCapitalAccountRequest) =>
     apiRequest<string>("/api/capitalaccounts", { method: "POST", ...json(request) }),
   updateCapitalAccount: (id: string, request: SaveCapitalAccountRequest) =>
@@ -39,6 +41,8 @@ export const financeApi = {
     apiRequest<string>("/api/investments", { method: "POST", ...json(request) }),
   updateInvestment: (id: string, request: SaveInvestmentRequest) =>
     apiRequest<string>(`/api/investments/${id}`, { method: "PUT", ...json(request) }),
+  archiveInvestment: (id: string) =>
+    apiRequest<string>(`/api/investments/${id}`, { method: "DELETE" }),
   closeInvestment: (id: string) =>
     apiRequest<string>(`/api/investments/${id}/close`, { method: "POST" }),
   reopenInvestment: (id: string) =>
@@ -47,6 +51,10 @@ export const financeApi = {
     apiRequest<InvestmentAdditionalCostResponse[]>(`/api/investmentadditionalcosts/investment/${investmentId}`),
   createAdditionalCost: (request: SaveInvestmentAdditionalCostRequest) =>
     apiRequest<string>("/api/investmentadditionalcosts", { method: "POST", ...json(request) }),
+  updateAdditionalCost: (id: string, request: SaveInvestmentAdditionalCostRequest) =>
+    apiRequest<string>(`/api/investmentadditionalcosts/${id}`, { method: "PUT", ...json(request) }),
+  archiveAdditionalCost: (id: string) =>
+    apiRequest<string>(`/api/investmentadditionalcosts/${id}`, { method: "DELETE" }),
 };
 
 export async function loadFinanceSnapshot(): Promise<FinanceSnapshot> {

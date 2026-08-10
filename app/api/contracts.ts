@@ -1,4 +1,5 @@
 export type UserStatus = "pendingEmailConfirmation" | "active" | "blocked";
+export type UserRole = "Administrator" | "User";
 export type CreditStatus = "active" | "completed" | "archived";
 export type CreditInstallmentStatus = "pending" | "paid" | "overdue";
 export type CapitalAccountType = "loan" | "creditCard" | "savings" | "person";
@@ -55,11 +56,18 @@ export interface UserResponse {
   emailVerified: boolean;
   isActive: boolean;
   status: UserStatus;
+  role: UserRole;
   createdAt: string;
   updatedAt: string;
 }
 
 export type UpdateUserRequest = Pick<UserResponse, "name" | "email">;
+
+export type AdminUserResponse = UserResponse;
+
+export interface UserCountResponse {
+  total: number;
+}
 
 export interface CreditResponse {
   id: string;

@@ -7,16 +7,15 @@ import type { Credit, CreditChanges } from "../finance/types";
 
 type LoanPanelProps = {
   credits: Credit[];
-  activeCreditId: number;
+  activeCreditId: string | null;
   remainingRepayment: number;
   remainingInstallments: number;
-  creditCommitments: Record<number, number>;
-  onSelectCredit: (id: number) => void;
-  onAddCredit: () => Credit;
+  creditCommitments: Record<string, number>;
+  onSelectCredit: (id: string) => void;
   onRemoveCredit: (
-    id: number,
-  ) => "deleted" | "has-open-investments";
-  onSaveCredit: (id: number, changes: CreditChanges) => boolean;
+    id: string,
+  ) => Promise<"deleted" | "has-open-investments" | "failed">;
+  onSaveCredit: (id: string | null, changes: CreditChanges) => Promise<boolean>;
 };
 
 function getEditableValues(credit: Credit): CreditChanges {
@@ -30,6 +29,15 @@ function getEditableValues(credit: Credit): CreditChanges {
   };
 }
 
+const EMPTY_CREDIT_CHANGES: CreditChanges = {
+  name: "",
+  loan: 0,
+  months: 0,
+  installments: 0,
+  payment: 0,
+  firstPaymentDate: "",
+};
+
 export function LoanPanel({
   credits,
   activeCreditId,
@@ -37,25 +45,28 @@ export function LoanPanel({
   remainingInstallments,
   creditCommitments,
   onSelectCredit,
-  onAddCredit,
   onRemoveCredit,
   onSaveCredit,
 }: LoanPanelProps) {
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const [editingCreditId, setEditingCreditId] = useState<number | null>(null);
-  const [newCreditId, setNewCreditId] = useState<number | null>(null);
+  const [editingCreditId, setEditingCreditId] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
   const [editDraft, setEditDraft] = useState<CreditChanges | null>(null);
   const [popupMessage, setPopupMessage] = useState("");
   const [creditToDelete, setCreditToDelete] = useState<Credit | null>(null);
   const activeCredit =
-    credits.find((credit) => credit.id === activeCreditId) ?? credits[0];
+    credits.find((credit) => credit.id === activeCreditId) ?? null;
   const isEditing =
-    editingCreditId === activeCredit.id && editDraft !== null;
-  const displayedCredit = isEditing ? editDraft : getEditableValues(activeCredit);
+    (isCreating || editingCreditId === activeCredit?.id) && editDraft !== null;
+  const displayedCredit = isEditing
+    ? editDraft
+    : activeCredit
+      ? getEditableValues(activeCredit)
+      : null;
   const creditPaid =
-    activeCredit.installments > 0 && remainingInstallments === 0;
-  const creditCount = credits.filter((credit) => credit.loan > 0).length;
-  const showEmptyState = creditCount === 0 && !isEditing;
+    (activeCredit?.installments ?? 0) > 0 && remainingInstallments === 0;
+  const creditCount = credits.length;
+  const showEmptyState = creditCount === 0 && !isCreating;
 
   useEffect(() => {
     if (!popupMessage && !creditToDelete) return;
@@ -69,29 +80,15 @@ export function LoanPanel({
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [creditToDelete, popupMessage]);
 
-  function selectCredit(id: number) {
-    if (
-      editingCreditId !== null &&
-      newCreditId === editingCreditId &&
-      editingCreditId !== id
-    ) {
-      onRemoveCredit(editingCreditId);
-      setNewCreditId(null);
-    }
+  function selectCredit(id: string) {
+    setIsCreating(false);
     setEditingCreditId(null);
     setEditDraft(null);
     onSelectCredit(id);
   }
 
   function beginEdit(credit: Credit) {
-    if (
-      editingCreditId !== null &&
-      newCreditId === editingCreditId &&
-      editingCreditId !== credit.id
-    ) {
-      onRemoveCredit(editingCreditId);
-      setNewCreditId(null);
-    }
+    setIsCreating(false);
     onSelectCredit(credit.id);
     setEditingCreditId(credit.id);
     setEditDraft(getEditableValues(credit));
@@ -99,36 +96,30 @@ export function LoanPanel({
   }
 
   function createCredit() {
-    if (newCreditId === editingCreditId && editingCreditId !== null) {
-      onRemoveCredit(editingCreditId);
-    }
-    const newCredit = onAddCredit();
-    setNewCreditId(newCredit.id);
-    setEditingCreditId(newCredit.id);
-    setEditDraft(getEditableValues(newCredit));
+    setIsCreating(true);
+    setEditingCreditId(null);
+    setEditDraft(EMPTY_CREDIT_CHANGES);
     window.requestAnimationFrame(() => nameInputRef.current?.focus());
   }
 
   function cancelEditing() {
-    if (newCreditId === editingCreditId && editingCreditId !== null) {
-      onRemoveCredit(editingCreditId);
-      setNewCreditId(null);
-    }
+    setIsCreating(false);
     setEditingCreditId(null);
     setEditDraft(null);
   }
 
-  function saveChanges() {
+  async function saveChanges() {
     if (!editDraft) return;
-    const saved = onSaveCredit(activeCredit.id, editDraft);
+    const id = isCreating ? null : activeCredit?.id ?? null;
+    const saved = await onSaveCredit(id, editDraft);
     if (!saved) {
-      const committedCapital = creditCommitments[activeCredit.id] ?? 0;
+      const committedCapital = id ? creditCommitments[id] ?? 0 : 0;
       setPopupMessage(
         `El monto no puede ser menor que ${money.format(committedCapital)}, porque ese capital está siendo usado en inversiones abiertas.`,
       );
       return;
     }
-    setNewCreditId(null);
+    setIsCreating(false);
     setEditingCreditId(null);
     setEditDraft(null);
   }
@@ -144,11 +135,10 @@ export function LoanPanel({
     setCreditToDelete(credit);
   }
 
-  function confirmCreditDeletion() {
+  async function confirmCreditDeletion() {
     if (!creditToDelete) return;
-    const result = onRemoveCredit(creditToDelete.id);
+    const result = await onRemoveCredit(creditToDelete.id);
     setCreditToDelete(null);
-    if (newCreditId === creditToDelete.id) setNewCreditId(null);
     setEditingCreditId(null);
     setEditDraft(null);
     if (result === "has-open-investments") {
@@ -187,7 +177,7 @@ export function LoanPanel({
             <h3>Aún no tienes préstamos registrados</h3>
             <p>Agrega tu primer préstamo para controlar sus cuotas y el capital disponible.</p>
           </div>
-          <button type="button" onClick={() => beginEdit(activeCredit)}>
+          <button type="button" onClick={createCredit}>
             Agregar préstamo
           </button>
         </div>
@@ -239,7 +229,7 @@ export function LoanPanel({
         </div>
       </div>}
 
-      {!showEmptyState && <div className={`credit-fields${isEditing ? " is-editing" : " is-readonly"}`}>
+      {!showEmptyState && displayedCredit && <div className={`credit-fields${isEditing ? " is-editing" : " is-readonly"}`}>
         <label className="credit-name-field">
           Nombre del crédito
           <input
@@ -252,13 +242,13 @@ export function LoanPanel({
         </label>
 
         <div className="field full">
-          <label htmlFor={`loan-${activeCreditId}`}>Monto recibido</label>
+          <label htmlFor={`loan-${activeCreditId ?? "new"}`}>Monto recibido</label>
           <div className="money-input">
             <span>S/</span>
             <input
-              id={`loan-${activeCreditId}`}
+              id={`loan-${activeCreditId ?? "new"}`}
               type="number"
-              min={creditCommitments[activeCreditId] ?? 0}
+              min={activeCreditId ? creditCommitments[activeCreditId] ?? 0 : 0}
               placeholder="Ingresa el monto"
               value={displayedCredit.loan || ""}
               disabled={!isEditing}
@@ -271,29 +261,18 @@ export function LoanPanel({
 
         <div className="fields">
           <label>
-            Plazo del préstamo (meses)
-            <input
-              type="number"
-              min="1"
-              placeholder="Ej. 15"
-              value={displayedCredit.months || ""}
-              disabled={!isEditing}
-              onChange={(event) =>
-                updateDraft("months", Number(event.target.value))
-              }
-            />
-          </label>
-          <label>
             Número de cuotas
             <input
               type="number"
               min="1"
               placeholder="Ingresa las cuotas"
               value={displayedCredit.installments || ""}
-              disabled={!isEditing}
-              onChange={(event) =>
-                updateDraft("installments", Number(event.target.value))
-              }
+              disabled={!isEditing || !isCreating}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                updateDraft("installments", value);
+                updateDraft("months", value);
+              }}
             />
           </label>
           <label>
@@ -305,7 +284,7 @@ export function LoanPanel({
                 min="0"
                 placeholder="Ingresa el valor"
                 value={displayedCredit.payment || ""}
-                disabled={!isEditing}
+                disabled={!isEditing || !isCreating}
                 onChange={(event) =>
                   updateDraft("payment", Number(event.target.value))
                 }
@@ -317,7 +296,7 @@ export function LoanPanel({
             <input
               type="date"
               value={displayedCredit.firstPaymentDate}
-              disabled={!isEditing}
+              disabled={!isEditing || !isCreating}
               onChange={(event) =>
                 updateDraft("firstPaymentDate", event.target.value)
               }
@@ -336,7 +315,7 @@ export function LoanPanel({
         </div>
       )}
 
-      {activeCredit.loan > 0 && !isEditing && (
+      {(activeCredit?.loan ?? 0) > 0 && !isEditing && (
         <Link className="credit-details-trigger" href="/creditos">
           <span className="credit-trigger-icon">i</span>
           <span className="credit-trigger-copy">
@@ -394,7 +373,7 @@ export function LoanPanel({
                 className={creditToDelete ? "danger" : "primary"}
                 onClick={
                   creditToDelete
-                    ? confirmCreditDeletion
+                    ? () => void confirmCreditDeletion()
                     : () => setPopupMessage("")
                 }
               >

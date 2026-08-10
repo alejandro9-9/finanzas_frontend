@@ -3,13 +3,25 @@
 import { useFinanceDashboard } from "../finance/use-finance-dashboard";
 import { AppTopbar } from "./app-topbar";
 import { InvestmentsPanel } from "./investments-panel";
+import { FinanceDataGate } from "./finance-data-gate";
 
 export function InvestmentDashboard() {
   const finance = useFinanceDashboard();
 
+  if (!finance.hasLoaded) {
+    return (
+      <FinanceDataGate
+        isLoading={finance.isLoading}
+        error={finance.error}
+        onRetry={() => void finance.refresh()}
+      />
+    );
+  }
+
   return (
     <main className="investments-page">
       <AppTopbar />
+      {finance.error && <p className="finance-api-error" role="alert">{finance.error}</p>}
 
       <section className="investments-page-hero">
         <div>

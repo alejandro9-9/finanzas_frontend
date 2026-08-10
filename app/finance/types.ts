@@ -3,7 +3,7 @@ export type Currency = "PEN" | "USD";
 export type CapitalSource = "loan" | "card" | "savings" | "person";
 
 export type Credit = {
-  id: number;
+  id: string;
   name: string;
   loan: number;
   months: number;
@@ -24,24 +24,26 @@ export type CreditChanges = Pick<
 >;
 
 export type AdditionalCost = {
-  id: number;
+  id: string | null;
+  capitalAccountId?: string;
   name: string;
   amount: number;
   currency: Currency;
   exchangeRate: number;
   capitalSource: CapitalSource;
-  creditId?: number;
+  creditId?: string;
 };
 
 export type Investment = {
-  id: number;
+  id: string;
+  capitalAccountId?: string;
   name: string;
   amount: number;
   salePricePen: number;
   currency: Currency;
   exchangeRate: number;
   capitalSource: CapitalSource;
-  creditId?: number;
+  creditId?: string;
   additionalCosts: AdditionalCost[];
   status: InvestmentStatus;
 };
@@ -65,17 +67,12 @@ export type InvestmentDraft = {
   currency: Currency;
   exchangeRate: string;
   capitalSource: CapitalSource;
-  creditId: number | null;
+  creditId: string | null;
   additionalCosts: AdditionalCost[];
 };
 
-export type StoredData = {
-  credits: Credit[];
-  activeCreditId: number;
-  investments: Investment[];
-};
-
 export type LoanPayment = {
+  id: string;
   number: number;
   date: Date;
   amount: number;
