@@ -29,6 +29,7 @@ type InvestmentsPanelProps = {
   open: Investment[];
   closed: Investment[];
   available: number;
+  creditAvailable: Record<string, number>;
   draft: InvestmentDraft;
   onDraftChange: <K extends keyof InvestmentDraft>(
     field: K,
@@ -49,6 +50,7 @@ export function InvestmentsPanel({
   open,
   closed,
   available,
+  creditAvailable,
   draft,
   onDraftChange,
   onAdd,
@@ -68,6 +70,11 @@ export function InvestmentsPanel({
     useState<CapitalSource>("loan");
   const [additionalCreditId, setAdditionalCreditId] =
     useState(activeCreditId ?? "");
+
+  const selectedCreditId = draft.creditId ?? activeCreditId;
+  const selectedCreditAvailable = selectedCreditId
+    ? creditAvailable[selectedCreditId] ?? 0
+    : 0;
 
   useEffect(() => {
     if (!popupMessage) return;
@@ -99,7 +106,9 @@ export function InvestmentsPanel({
     const added = await onAdd();
     if (!added) {
       setPopupMessage(
-        `No se puede usar más capital del préstamo. Disponible: ${money.format(available)}.`,
+        draft.capitalSource === "loan"
+          ? `No se puede usar más capital del préstamo seleccionado. Disponible: ${money.format(selectedCreditAvailable)}.`
+          : "No se pudo registrar la inversión. Revisa los datos e inténtalo de nuevo.",
       );
     }
   }
@@ -190,7 +199,7 @@ export function InvestmentsPanel({
           )}
           <small>
             {draft.capitalSource === "loan"
-              ? `El monto base se descontará del préstamo. Disponible: ${money.format(available)}.`
+              ? `El monto base se descontará del préstamo. Disponible: ${money.format(selectedCreditAvailable)}.`
               : "El monto base no modifica el préstamo. Cada adicional usa su propio origen."}
           </small>
         </label>

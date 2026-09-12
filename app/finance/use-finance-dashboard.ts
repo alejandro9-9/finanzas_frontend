@@ -199,12 +199,24 @@ export function useFinanceDashboard() {
     ]),
   ) as Record<string, number>;
 
+  function getCreditAvailable(creditId: string, excludedInvestmentId?: string) {
+    const credit = credits.find((item) => item.id === creditId);
+    if (!credit) return 0;
+
+    const used = investments
+      .filter((item) => item.status === "open" && item.id !== excludedInvestmentId)
+      .reduce((sum, item) => sum + getAttributedCreditCost(item, creditId), 0);
+
+    return Math.max(0, credit.loan - getCreditTotals(credit).paidAmount - used);
+  }
+
+  const creditAvailable = Object.fromEntries(
+    credits.map((credit) => [credit.id, getCreditAvailable(credit.id)]),
+  ) as Record<string, number>;
+
   function canFundInvestment(investment: InvestmentValues, excludedInvestmentId?: string) {
     return credits.every((credit) => {
-      const used = investments
-        .filter((item) => item.status === "open" && item.id !== excludedInvestmentId)
-        .reduce((sum, item) => sum + getAttributedCreditCost(item, credit.id), 0);
-      const available = Math.max(0, credit.loan - getCreditTotals(credit).paidAmount - used);
+      const available = getCreditAvailable(credit.id, excludedInvestmentId);
       return getAttributedCreditCost(investment, credit.id) <= available + 0.005;
     });
   }
@@ -551,6 +563,7 @@ export function useFinanceDashboard() {
     investedPercentage: totals.totalCapital > 0 ? Math.min(100, Math.max(0, (totals.invested / totals.totalCapital) * 100)) : 0,
     expectedReturn: totals.openCapital ? (totals.projectedProfit / totals.openCapital) * 100 : 0,
     setActiveCreditId,
+    creditAvailable,
     saveCredit,
     removeCredit,
     updateDraft,
