@@ -190,6 +190,11 @@ export function useFinanceDashboard() {
     return getCreditFundedInvestmentCost(investment, creditId);
   }
 
+  function getAttributedCreditProfit(investment: Investment, creditId: string) {
+    if (investment.status !== "closed" || investment.creditId !== creditId) return 0;
+    return investment.salePricePen - getInvestmentCostInSoles(investment);
+  }
+
   const creditCommitments = Object.fromEntries(
     credits.map((credit) => [
       credit.id,
@@ -206,8 +211,14 @@ export function useFinanceDashboard() {
     const used = investments
       .filter((item) => item.status === "open" && item.id !== excludedInvestmentId)
       .reduce((sum, item) => sum + getAttributedCreditCost(item, creditId), 0);
+    const realizedProfit = investments
+      .filter((item) => item.status === "closed")
+      .reduce((sum, item) => sum + getAttributedCreditProfit(item, creditId), 0);
 
-    return Math.max(0, credit.loan - getCreditTotals(credit).paidAmount - used);
+    return Math.max(
+      0,
+      credit.loan - getCreditTotals(credit).paidAmount - used + realizedProfit,
+    );
   }
 
   const creditAvailable = Object.fromEntries(
