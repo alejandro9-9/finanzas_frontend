@@ -20,7 +20,7 @@ h1 { margin:0; font-size:clamp(46px,6vw,76px); letter-spacing:-.06em; line-heigh
 .summary { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid var(--line); border-radius:18px; overflow:hidden; background:#f9f7f1; }
 .summary article { padding:26px 28px; display:flex; flex-direction:column; gap:7px; border-right:1px solid var(--line); }
 .summary article:last-child { border:0; }.summary .dark { background:var(--ink); color:white; }.summary p,.loan-total p,.loan-snapshot p { margin:0; color:#74776f; font-size:12px; }
-.summary strong { font-size:31px; letter-spacing:-.04em; }.summary small,.loan-total small,.loan-snapshot small { color:#84877f; }.green { color:var(--green); }
+.summary strong { font-size:31px; letter-spacing:-.04em; }.summary small,.loan-total small,.loan-snapshot small { color:#84877f; }.green { color:var(--green); }.summary .negative { color:#a6322f; }
 .grid { display:grid; grid-template-columns:.92fr 1.08fr; gap:18px; margin-top:18px; align-items:start; }
 .panel { border:1px solid var(--line); border-radius:18px; background:#f9f7f1; padding:30px; }
 .section-head { display:flex; align-items:start; justify-content:space-between; margin-bottom:28px; }.section-head h2 { font-size:23px; margin:0; letter-spacing:-.03em; }.pill { background:#e7f6bc; color:#4a6818; padding:7px 12px; border-radius:99px; font-size:11px; font-weight:700; }.count { display:grid; place-items:center; width:30px; height:30px; border:1px solid var(--line); border-radius:50%; font-size:12px; }

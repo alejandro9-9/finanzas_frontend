@@ -11,6 +11,8 @@ type SummaryProps = {
   projectedProfit: number;
   expectedReturn: number;
   currentBalance: number;
+  openCount: number;
+  closedCount: number;
 };
 
 export function Summary({
@@ -24,7 +26,12 @@ export function Summary({
   projectedProfit,
   expectedReturn,
   currentBalance,
+  openCount,
+  closedCount,
 }: SummaryProps) {
+  const formatGain = (value: number) =>
+    `${value > 0 ? "+" : ""}${money.format(value)}`;
+
   return (
     <section className="summary">
       <article>
@@ -49,14 +56,23 @@ export function Summary({
         </small>
       </article>
       <article>
-        <p>Prospección abierta</p>
-        <strong className="green">+{money.format(projectedProfit)}</strong>
-        <small>{expectedReturn.toFixed(1)}% de retorno esperado</small>
+        <p>Ganancia potencial</p>
+        <strong className={projectedProfit >= 0 ? "green" : "negative"}>
+          {formatGain(projectedProfit)}
+        </strong>
+        <small>
+          {openCount} {openCount === 1 ? "operación abierta" : "operaciones abiertas"}
+          {` · ${expectedReturn.toFixed(1)}% de retorno esperado`}
+        </small>
       </article>
       <article>
-        <p>Balance actual</p>
-        <strong>{money.format(currentBalance)}</strong>
-        <small>Utilidad de inversiones cerradas</small>
+        <p>Ganancia realizada</p>
+        <strong className={currentBalance >= 0 ? "green" : "negative"}>
+          {formatGain(currentBalance)}
+        </strong>
+        <small>
+          {closedCount} {closedCount === 1 ? "operación cerrada" : "operaciones cerradas"}
+        </small>
       </article>
     </section>
   );

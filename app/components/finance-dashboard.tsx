@@ -52,6 +52,8 @@ export function FinanceDashboard() {
         projectedProfit={finance.totals.projectedProfit}
         expectedReturn={finance.expectedReturn}
         currentBalance={finance.totals.currentBalance}
+        openCount={finance.totals.open.length}
+        closedCount={finance.totals.closed.length}
       />
 
       <div className="grid">
