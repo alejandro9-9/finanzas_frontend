@@ -88,5 +88,5 @@ test("an administrator can review statistics and block a user", async ({ page })
   await expect(page.getByRole("status")).toContainText(
     "Lucía Torres fue bloqueado correctamente.",
   );
-  await expect(userRow.getByRole("button", { name: "Bloqueado" })).toBeDisabled();
+  await expect(userRow.getByRole("button", { name: "Desbloquear" })).toBeEnabled();
 });
