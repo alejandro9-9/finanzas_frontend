@@ -22,6 +22,11 @@ export function FinanceDashboard() {
     );
   }
 
+  const nonLoanUsed = finance.totals.nonLoanUsage.reduce(
+    (total, item) => total + item.amount,
+    0,
+  );
+
   return (
     <main>
       <AppTopbar />
@@ -50,10 +55,7 @@ export function FinanceDashboard() {
         creditCount={finance.creditCount}
         available={finance.totals.available}
         availablePercentage={finance.availablePercentage}
-        nonLoanUsed={finance.totals.nonLoanUsage.reduce(
-          (total, item) => total + item.amount,
-          0,
-        )}
+        nonLoanUsed={nonLoanUsed}
         projectedProfit={finance.totals.projectedProfit}
         expectedReturn={finance.expectedReturn}
         currentBalance={finance.totals.currentBalance}
@@ -76,14 +78,14 @@ export function FinanceDashboard() {
           totalCapital={finance.totals.totalCapital}
           available={finance.totals.available}
           invested={finance.totals.invested}
+          nonLoanUsed={nonLoanUsed}
           projectedProfit={finance.totals.projectedProfit}
           currentBalance={finance.totals.currentBalance}
           openCount={finance.totals.open.length}
           closedCount={finance.totals.closed.length}
         />
+        <NonLoanCapitalChart data={finance.totals.nonLoanUsage} />
       </div>
-
-      <NonLoanCapitalChart data={finance.totals.nonLoanUsage} />
 
       <BalanceFooter
         currentBalance={finance.totals.currentBalance}

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { money } from "../finance/format";
 import { useFinanceDashboard } from "../finance/use-finance-dashboard";
 import { AppTopbar } from "./app-topbar";
+import { CreditCreateDialog } from "./credit-create-dialog";
 import { FinanceDataGate } from "./finance-data-gate";
 
 const paymentDate = new Intl.DateTimeFormat("es-PE", {
@@ -61,6 +62,7 @@ export function CreditDashboard() {
     "pending",
   );
   const [showAllPayments, setShowAllPayments] = useState(false);
+  const [isCreatingCredit, setIsCreatingCredit] = useState(false);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setToday(new Date()));
@@ -136,7 +138,9 @@ export function CreditDashboard() {
             ))}
           </select>
         </div>
-        <Link href="/panel">+ Nuevo crédito</Link>
+        <button type="button" onClick={() => setIsCreatingCredit(true)}>
+          + Nuevo crédito
+        </button>
       </section>
 
       {finance.loan <= 0 ? (
@@ -366,6 +370,12 @@ export function CreditDashboard() {
           </section>
         </>
       )}
+      {isCreatingCredit ? (
+        <CreditCreateDialog
+          onClose={() => setIsCreatingCredit(false)}
+          onSave={finance.saveCredit}
+        />
+      ) : null}
     </main>
   );
 }

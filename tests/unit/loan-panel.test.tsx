@@ -56,7 +56,7 @@ describe("LoanPanel", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /Agregar pr.stamo/i }));
-    await user.click(screen.getByRole("button", { name: /Guardar cambios/i }));
+    await user.click(screen.getByRole("button", { name: /Guardar crédito/i }));
 
     expect(screen.getByText("Ingresa un nombre para el crédito.")).toBeInTheDocument();
     expect(onSaveCredit).not.toHaveBeenCalled();

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { money } from "../finance/format";
 import type { Credit, CreditChanges } from "../finance/types";
+import { CreditCreateDialog } from "./credit-create-dialog";
 
 type LoanPanelProps = {
   credits: Credit[];
@@ -32,15 +33,6 @@ function getEditableValues(credit: Credit): CreditChanges {
   };
 }
 
-const EMPTY_CREDIT_CHANGES: CreditChanges = {
-  name: "",
-  loan: 0,
-  months: 0,
-  installments: 0,
-  payment: 0,
-  firstPaymentDate: "",
-};
-
 export function LoanPanel({
   credits,
   activeCreditId,
@@ -59,8 +51,7 @@ export function LoanPanel({
   const [creditToDelete, setCreditToDelete] = useState<Credit | null>(null);
   const activeCredit =
     credits.find((credit) => credit.id === activeCreditId) ?? null;
-  const isEditing =
-    (isCreating || editingCreditId === activeCredit?.id) && editDraft !== null;
+  const isEditing = editingCreditId === activeCredit?.id && editDraft !== null;
   const displayedCredit = isEditing
     ? editDraft
     : activeCredit
@@ -71,7 +62,7 @@ export function LoanPanel({
   const scheduleLocked =
     !isCreating && (activeCredit?.paidInstallments.length ?? 0) > 0;
   const creditCount = credits.length;
-  const showEmptyState = creditCount === 0 && !isCreating;
+  const showEmptyState = creditCount === 0;
 
   useEffect(() => {
     if (!popupMessage && !creditToDelete) return;
@@ -103,8 +94,7 @@ export function LoanPanel({
   function createCredit() {
     setIsCreating(true);
     setEditingCreditId(null);
-    setEditDraft(EMPTY_CREDIT_CHANGES);
-    window.requestAnimationFrame(() => nameInputRef.current?.focus());
+    setEditDraft(null);
   }
 
   function cancelEditing() {
@@ -137,7 +127,7 @@ export function LoanPanel({
       return;
     }
 
-    const id = isCreating ? null : activeCredit?.id ?? null;
+    const id = activeCredit?.id ?? null;
     const result = await onSaveCredit(id, editDraft);
     if (result === "capital-conflict") {
       const committedCapital = id ? creditCommitments[id] ?? 0 : 0;
@@ -187,6 +177,89 @@ export function LoanPanel({
         : currentDraft,
     );
   }
+
+  const creditFields = displayedCredit ? (
+    <>
+      <label className="credit-name-field">
+        Nombre del crédito
+        <input
+          ref={nameInputRef}
+          value={displayedCredit.name}
+          placeholder="Ej. Préstamo personal"
+          disabled={!isEditing}
+          onChange={(event) => updateDraft("name", event.target.value)}
+        />
+      </label>
+
+      <div className="field full">
+        <label htmlFor={`loan-${activeCreditId ?? "new"}`}>Monto recibido</label>
+        <div className="money-input">
+          <span>S/</span>
+          <input
+            id={`loan-${activeCreditId ?? "new"}`}
+            type="number"
+            min={activeCreditId ? creditCommitments[activeCreditId] ?? 0 : 0}
+            placeholder="Ingresa el monto"
+            value={displayedCredit.loan || ""}
+            disabled={!isEditing}
+            onChange={(event) =>
+              updateDraft("loan", Number(event.target.value))
+            }
+          />
+        </div>
+      </div>
+
+      <div className="fields">
+        <label>
+          Número de cuotas
+          <input
+            type="number"
+            min="1"
+            placeholder="Ingresa las cuotas"
+            value={displayedCredit.installments || ""}
+            disabled={!isEditing || scheduleLocked}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              updateDraft("installments", value);
+              updateDraft("months", value);
+            }}
+          />
+        </label>
+        <label>
+          Valor de cada cuota
+          <div className="inline-money">
+            <span>S/</span>
+            <input
+              type="number"
+              min="0"
+              placeholder="Ingresa el valor"
+              value={displayedCredit.payment || ""}
+              disabled={!isEditing || scheduleLocked}
+              onChange={(event) =>
+                updateDraft("payment", Number(event.target.value))
+              }
+            />
+          </div>
+        </label>
+        <label>
+          Fecha de la primera cuota
+          <input
+            type="date"
+            value={displayedCredit.firstPaymentDate}
+            disabled={!isEditing || scheduleLocked}
+            onChange={(event) =>
+              updateDraft("firstPaymentDate", event.target.value)
+            }
+          />
+        </label>
+      </div>
+      {!isCreating && scheduleLocked ? (
+        <p className="credit-schedule-lock" role="note">
+          El calendario no puede modificarse porque ya tiene cuotas pagadas.
+        </p>
+      ) : null}
+    </>
+  ) : null;
 
   return (
     <section className="panel loan-panel">
@@ -261,88 +334,13 @@ export function LoanPanel({
         </div>
       </div>}
 
-      {!showEmptyState && displayedCredit && <div className={`credit-fields${isEditing ? " is-editing" : " is-readonly"}`}>
-        <label className="credit-name-field">
-          Nombre del crédito
-          <input
-            ref={nameInputRef}
-            value={displayedCredit.name}
-            placeholder="Ej. Préstamo personal"
-            disabled={!isEditing}
-            onChange={(event) => updateDraft("name", event.target.value)}
-          />
-        </label>
-
-        <div className="field full">
-          <label htmlFor={`loan-${activeCreditId ?? "new"}`}>Monto recibido</label>
-          <div className="money-input">
-            <span>S/</span>
-            <input
-              id={`loan-${activeCreditId ?? "new"}`}
-              type="number"
-              min={activeCreditId ? creditCommitments[activeCreditId] ?? 0 : 0}
-              placeholder="Ingresa el monto"
-              value={displayedCredit.loan || ""}
-              disabled={!isEditing}
-              onChange={(event) =>
-                updateDraft("loan", Number(event.target.value))
-              }
-            />
-          </div>
+      {!showEmptyState && !isCreating && activeCredit && creditFields && (
+        <div className={`credit-fields${isEditing ? " is-editing" : " is-readonly"}`}>
+          {creditFields}
         </div>
+      )}
 
-        <div className="fields">
-          <label>
-            Número de cuotas
-            <input
-              type="number"
-              min="1"
-              placeholder="Ingresa las cuotas"
-              value={displayedCredit.installments || ""}
-              disabled={!isEditing || scheduleLocked}
-              onChange={(event) => {
-                const value = Number(event.target.value);
-                updateDraft("installments", value);
-                updateDraft("months", value);
-              }}
-            />
-          </label>
-          <label>
-            Valor de cada cuota
-            <div className="inline-money">
-              <span>S/</span>
-              <input
-                type="number"
-                min="0"
-                placeholder="Ingresa el valor"
-                value={displayedCredit.payment || ""}
-                disabled={!isEditing || scheduleLocked}
-                onChange={(event) =>
-                  updateDraft("payment", Number(event.target.value))
-                }
-              />
-            </div>
-          </label>
-          <label>
-            Fecha de la primera cuota
-            <input
-              type="date"
-              value={displayedCredit.firstPaymentDate}
-              disabled={!isEditing || scheduleLocked}
-              onChange={(event) =>
-                updateDraft("firstPaymentDate", event.target.value)
-              }
-            />
-          </label>
-        </div>
-        {isEditing && scheduleLocked ? (
-          <p className="credit-schedule-lock" role="note">
-            El calendario no puede modificarse porque ya tiene cuotas pagadas.
-          </p>
-        ) : null}
-      </div>}
-
-      {isEditing && (
+      {isEditing && !isCreating && (
         <div className="credit-save-actions">
           <span>Los cambios se aplicarán cuando los guardes.</span>
           <div>
@@ -368,6 +366,10 @@ export function LoanPanel({
           </span>
         </Link>
       )}
+
+      {isCreating ? (
+        <CreditCreateDialog onClose={cancelEditing} onSave={onSaveCredit} />
+      ) : null}
 
       {(popupMessage || creditToDelete) && (
         <div
