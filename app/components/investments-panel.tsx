@@ -60,6 +60,7 @@ export function InvestmentsPanel({
   onRemove,
   onDuplicate,
 }: InvestmentsPanelProps) {
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [popupMessage, setPopupMessage] = useState("");
   const [additionalName, setAdditionalName] = useState("");
   const [additionalAmount, setAdditionalAmount] = useState("");
@@ -77,15 +78,18 @@ export function InvestmentsPanel({
     : 0;
 
   useEffect(() => {
-    if (!popupMessage) return;
+    if (!popupMessage && !isCreateOpen) return;
 
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setPopupMessage("");
+      if (event.key === "Escape") {
+        setPopupMessage("");
+        setIsCreateOpen(false);
+      }
     }
 
     document.addEventListener("keydown", closeOnEscape);
     return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [popupMessage]);
+  }, [isCreateOpen, popupMessage]);
 
   async function submitInvestment(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -110,7 +114,10 @@ export function InvestmentsPanel({
           ? `No se puede usar más capital del préstamo seleccionado. Disponible: ${money.format(selectedCreditAvailable)}.`
           : "No se pudo registrar la inversión. Revisa los datos e inténtalo de nuevo.",
       );
+      return;
     }
+
+    setIsCreateOpen(false);
   }
 
   function addAdditionalCost() {
@@ -152,11 +159,53 @@ export function InvestmentsPanel({
           <p className="eyebrow">02 · INVERSIONES</p>
           <h2>Destino del capital</h2>
         </div>
-        <span className="count">{investments.length}</span>
+        <div className="investment-heading-actions">
+          <button
+            className="add-investment-trigger"
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={isCreateOpen}
+            onClick={() => setIsCreateOpen(true)}
+          >
+            <span aria-hidden="true">＋</span> Agregar inversión
+          </button>
+          <span className="count">{investments.length}</span>
+        </div>
       </div>
 
-      <form onSubmit={submitInvestment}>
+      {isCreateOpen && (
+        <div
+          className="finance-popup-overlay investment-create-overlay"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsCreateOpen(false);
+          }}
+        >
+          <section
+            className="investment-create-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="investment-create-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="investment-create-heading">
+              <div>
+                <p className="eyebrow">NUEVA OPERACIÓN</p>
+                <h2 id="investment-create-title">Agregar inversión</h2>
+              </div>
+              <button
+                className="investment-create-close"
+                type="button"
+                aria-label="Cerrar formulario de inversión"
+                onClick={() => setIsCreateOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+
+            <form onSubmit={submitInvestment}>
         <input
+          autoFocus
           aria-label="Nombre de inversión"
           placeholder="Nombre de la inversión"
           value={draft.name}
@@ -368,7 +417,10 @@ export function InvestmentsPanel({
           />
           <button type="submit">Agregar abierta</button>
         </div>
-      </form>
+            </form>
+          </section>
+        </div>
+      )}
 
       <div className="investment-groups">
         <InvestmentGroup

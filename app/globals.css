@@ -80,6 +80,18 @@ form { background:#eeebe3; padding:14px; border-radius:12px; }.form-row { displa
 .source-savings { background:#dff4eb; color:#176d4b!important; }
 .source-person { background:#f7e9db; color:#8a5728!important; }
 .additional-summary { color:#85641e!important; font-weight:700; }
+.investment-heading-actions { display:flex; align-items:center; gap:10px; }
+.add-investment-trigger { min-height:38px; display:flex; align-items:center; gap:7px; padding:0 13px; border:1px solid var(--line); border-radius:9px; background:var(--ink); color:white; cursor:pointer; font-size:10px; font-weight:800; transition:background .2s,color .2s,transform .2s; }
+.add-investment-trigger:hover { color:var(--lime); transform:translateY(-1px); }
+.add-investment-trigger:focus-visible,.investment-create-close:focus-visible { outline:2px solid var(--green); outline-offset:3px; }
+.add-investment-trigger>span { font-size:16px; line-height:1; }
+.investment-create-dialog { width:min(780px,100%); max-height:calc(100vh - 40px); overflow-y:auto; border:1px solid #ffffff24; border-radius:18px; background:#f9f7f1; box-shadow:0 28px 80px #0007; animation:popup-rise-in .2s ease-out; }
+.investment-create-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:22px 24px 0; }
+.investment-create-heading .eyebrow { margin-bottom:7px; }
+.investment-create-heading h2 { margin:0; font-size:24px; letter-spacing:-.04em; }
+.investment-create-close { display:grid; place-items:center; flex:0 0 auto; width:36px; height:36px; border:1px solid var(--line); border-radius:9px; background:white; color:#666b63; cursor:pointer; font-size:24px; line-height:1; }
+.investment-create-close:hover { background:#eeebe3; color:var(--ink); }
+.investment-create-dialog>form { margin:0; padding:18px 24px 24px; }
 .funding-credit { color:#5d6556!important; font-weight:750; }
 .edit-source-field { margin-top:8px; }
 .return .projected-gain { color:var(--green); font-weight:700; }
@@ -419,6 +431,7 @@ button.login-submit:focus-visible { outline:3px solid var(--green); outline-offs
 @media (max-width:760px) { .admin-hero{align-items:flex-start;flex-direction:column;gap:20px;padding-top:42px}.admin-hero>p{width:auto}.admin-stats{grid-template-columns:repeat(2,1fr)}.admin-users-heading{align-items:flex-start;flex-direction:column}.admin-dialog>div{align-items:stretch;flex-direction:column}.admin-dialog button{width:100%} }
 @media (max-width:480px) { .admin-page{padding-right:18px;padding-left:18px}.admin-stats{grid-template-columns:1fr}.admin-stats article{min-height:128px}.admin-users-heading,.admin-toolbar{padding-right:20px;padding-left:20px}.admin-notice,.admin-error{margin-right:20px;margin-left:20px} }
 @media (max-width:800px) { .summary article:nth-child(n+4){border-top:0} }
+@media (max-width:620px) { .investment-create-overlay{padding:10px}.investment-create-dialog{max-height:calc(100vh - 20px)}.investment-create-heading{padding:18px 16px 0}.investment-create-dialog>form{padding:16px}.investment-heading-actions{gap:6px}.add-investment-trigger{padding:0 9px;font-size:9px} }
 .non-loan-chart { margin-top:18px; padding:24px 28px; }
 .non-loan-chart .section-head { align-items:center; }
 .non-loan-chart-total { color:var(--green); font-size:22px; letter-spacing:-.035em; }
