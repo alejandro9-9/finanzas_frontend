@@ -50,6 +50,10 @@ export function FinanceDashboard() {
         creditCount={finance.creditCount}
         available={finance.totals.available}
         availablePercentage={finance.availablePercentage}
+        nonLoanUsed={finance.totals.nonLoanUsage.reduce(
+          (total, item) => total + item.amount,
+          0,
+        )}
         projectedProfit={finance.totals.projectedProfit}
         expectedReturn={finance.expectedReturn}
         currentBalance={finance.totals.currentBalance}

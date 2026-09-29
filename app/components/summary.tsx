@@ -8,6 +8,7 @@ type SummaryProps = {
   creditCount: number;
   available: number;
   availablePercentage: number;
+  nonLoanUsed: number;
   projectedProfit: number;
   expectedReturn: number;
   currentBalance: number;
@@ -23,6 +24,7 @@ export function Summary({
   creditCount,
   available,
   availablePercentage,
+  nonLoanUsed,
   projectedProfit,
   expectedReturn,
   currentBalance,
@@ -54,6 +56,11 @@ export function Summary({
           {availablePercentage.toFixed(0)}% sin asignar
           {currentBalance > 0 && " · incluye ganancias cerradas"}
         </small>
+      </article>
+      <article>
+        <p>Usado sin préstamo</p>
+        <strong>{money.format(nonLoanUsed)}</strong>
+        <small>Tarjeta · efectivo · otras fuentes</small>
       </article>
       <article>
         <p>Ganancia potencial</p>
