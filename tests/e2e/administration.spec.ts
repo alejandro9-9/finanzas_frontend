@@ -43,7 +43,7 @@ test("an administrator can review statistics and block a user", async ({ page })
     window.sessionStorage.setItem("flujo-access-token", "admin-token");
   });
 
-  await page.route("http://localhost:5260/api/**", async (route) => {
+  await page.route("**/api/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
 
