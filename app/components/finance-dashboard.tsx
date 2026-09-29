@@ -7,6 +7,7 @@ import { CapitalOverview } from "./capital-overview";
 import { LoanPanel } from "./loan-panel";
 import { Summary } from "./summary";
 import { FinanceDataGate } from "./finance-data-gate";
+import { NonLoanCapitalChart } from "./non-loan-capital-chart";
 
 export function FinanceDashboard() {
   const finance = useFinanceDashboard();
@@ -77,6 +78,8 @@ export function FinanceDashboard() {
           closedCount={finance.totals.closed.length}
         />
       </div>
+
+      <NonLoanCapitalChart data={finance.totals.nonLoanUsage} />
 
       <BalanceFooter
         currentBalance={finance.totals.currentBalance}

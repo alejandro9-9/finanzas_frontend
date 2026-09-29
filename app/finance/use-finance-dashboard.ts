@@ -22,6 +22,7 @@ import {
   getInvestmentCostInSoles,
   getLoanFundedInvestmentCost,
   normalizeCurrency,
+  toSoles,
 } from "./format";
 
 export const EMPTY_DRAFT: InvestmentDraft = {
@@ -237,6 +238,21 @@ export function useFinanceDashboard() {
     const closed = investments.filter((item) => item.status === "closed");
     const openCapital = open.reduce((sum, item) => sum + getInvestmentCostInSoles(item), 0);
     const invested = open.reduce((sum, item) => sum + getLoanFundedInvestmentCost(item), 0);
+    const nonLoanUsage = (["card", "savings", "person"] as const).map((source) => ({
+      source,
+      amount: open.reduce((total, item) => {
+        const investmentAmount = item.capitalSource === source
+          ? toSoles(item.amount, item.currency, item.exchangeRate)
+          : 0;
+        const additionalCosts = item.additionalCosts.reduce(
+          (sum, cost) => cost.capitalSource === source
+            ? sum + toSoles(cost.amount, cost.currency, cost.exchangeRate)
+            : sum,
+          0,
+        );
+        return total + investmentAmount + additionalCosts;
+      }, 0),
+    }));
     const projectedProfit = open.reduce(
       (sum, item) => sum + item.salePricePen - getInvestmentCostInSoles(item),
       0,
@@ -260,6 +276,7 @@ export function useFinanceDashboard() {
       open,
       closed,
       invested,
+      nonLoanUsage,
       openCapital,
       projectedProfit,
       currentBalance,
