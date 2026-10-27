@@ -17,6 +17,7 @@ import type {
   InvestmentStatus,
   InvestmentValues,
 } from "./types";
+import { getCreditTotals, getInstallmentAllocation } from "./credit-calculations";
 import {
   getCreditFundedInvestmentCost,
   getInvestmentCostInSoles,
@@ -44,23 +45,6 @@ function sourceToAccountType(source: CapitalSource): CapitalAccountType {
   return source === "card" ? "creditCard" : source;
 }
 
-function getCreditTotals(credit: Credit) {
-  const repayment = credit.installments * credit.payment;
-  const paidCount = new Set(credit.paidInstallments).size;
-  const paidAmount = Math.min(repayment, paidCount * credit.payment);
-
-  return {
-    repayment,
-    paidCount,
-    paidAmount,
-    remainingRepayment: Math.max(0, repayment - paidAmount),
-    remainingLoan: Math.max(0, credit.loan - paidAmount),
-    remainingInstallments: Math.max(0, credit.installments - paidCount),
-    paymentProgress: repayment > 0 ? (paidAmount / repayment) * 100 : 0,
-    cost: credit.loan > 0 && repayment > 0 ? repayment - credit.loan : 0,
-  };
-}
-
 function mapSnapshot(snapshot: FinanceSnapshot) {
   const capitalAccounts = snapshot.capitalAccounts.map((account) => ({
     ...account,
@@ -80,6 +64,12 @@ function mapSnapshot(snapshot: FinanceSnapshot) {
       paidInstallments: (snapshot.installmentsByCreditId[credit.id] ?? [])
         .filter((installment) => installment.status === "paid")
         .map((installment) => installment.number),
+      paidAmountsByInstallment: Object.fromEntries(
+        (snapshot.installmentsByCreditId[credit.id] ?? []).map((installment) => [
+          installment.number,
+          installment.paidAmount,
+        ]),
+      ),
     }));
 
   const investments: Investment[] = snapshot.investments
@@ -178,6 +168,7 @@ export function useFinanceDashboard() {
       repayment: 0,
       paidCount: 0,
       paidAmount: 0,
+      principalPaid: 0,
       remainingRepayment: 0,
       remainingLoan: 0,
       remainingInstallments: 0,
@@ -218,7 +209,7 @@ export function useFinanceDashboard() {
 
     return Math.max(
       0,
-      credit.loan - getCreditTotals(credit).paidAmount - used + realizedProfit,
+      credit.loan - getCreditTotals(credit).principalPaid - used + realizedProfit,
     );
   }
 
@@ -295,15 +286,16 @@ export function useFinanceDashboard() {
     };
   }, [credits, investments]);
 
-  const paymentSchedule = useMemo(
-    () => (activeCredit ? installmentsByCreditId[activeCredit.id] ?? [] : []).map((installment) => ({
+  const paymentSchedule = useMemo(() => {
+    if (!activeCredit) return [];
+    return (installmentsByCreditId[activeCredit.id] ?? []).map((installment) => ({
       id: installment.id,
       number: installment.number,
       date: new Date(`${installment.dueDate}T00:00:00`),
       amount: installment.amount,
-    })),
-    [activeCredit, installmentsByCreditId],
-  );
+      ...getInstallmentAllocation(activeCredit, installment.number),
+    }));
+  }, [activeCredit, installmentsByCreditId]);
 
   async function saveCredit(id: string | null, changes: CreditChanges) {
     const committed = id ? creditCommitments[id] ?? 0 : 0;

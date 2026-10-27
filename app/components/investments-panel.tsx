@@ -248,7 +248,7 @@ export function InvestmentsPanel({
           )}
           <small>
             {draft.capitalSource === "loan"
-              ? `El monto base se descontará del préstamo. Disponible: ${money.format(selectedCreditAvailable)}.`
+              ? `Se descontará del crédito seleccionado. Disponible en este crédito: ${money.format(selectedCreditAvailable)}. Capital disponible global: ${money.format(available)}.`
               : "El monto base no modifica el préstamo. Cada adicional usa su propio origen."}
           </small>
         </label>

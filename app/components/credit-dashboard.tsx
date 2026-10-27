@@ -325,6 +325,9 @@ export function CreditDashboard() {
                           <time dateTime={installment.date.toISOString()}>
                             {paymentDate.format(installment.date)}
                           </time>
+                          <small className="payment-breakdown">
+                            Capital {money.format(installment.principal)} · Interés {money.format(installment.interest)}
+                          </small>
                           {isPaid ? (
                             <small className="row-due-status paid">Pagada</small>
                           ) : dueStatus ? (

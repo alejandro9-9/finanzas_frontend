@@ -11,6 +11,7 @@ export type Credit = {
   payment: number;
   firstPaymentDate: string;
   paidInstallments: number[];
+  paidAmountsByInstallment?: Record<number, number>;
 };
 
 export type CreditChanges = Pick<
