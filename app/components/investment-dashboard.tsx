@@ -46,6 +46,7 @@ export function InvestmentDashboard() {
         closed={finance.totals.closed}
         available={finance.totals.available}
         creditAvailable={finance.creditAvailable}
+        externalProfitByCredit={finance.externalProfitByCredit}
         draft={finance.draft}
         onDraftChange={finance.updateDraft}
         onAdd={finance.addInvestment}

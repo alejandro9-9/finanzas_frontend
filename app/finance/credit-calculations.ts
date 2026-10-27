@@ -6,6 +6,32 @@ type CreditWithRecordedPayments = Credit & {
 
 const roundToCents = (amount: number) => Math.round((amount + Number.EPSILON) * 100) / 100;
 
+export function distributeProfitProportionally(
+  profit: number,
+  credits: Array<{ id: string; remainingPrincipal: number }>,
+) {
+  const pool = roundToCents(Math.max(0, profit));
+  const eligibleCredits = credits.filter((credit) => credit.remainingPrincipal > 0);
+  const totalPrincipal = eligibleCredits.reduce(
+    (sum, credit) => sum + credit.remainingPrincipal,
+    0,
+  );
+
+  if (pool <= 0 || totalPrincipal <= 0) return {} as Record<string, number>;
+
+  let allocated = 0;
+  return Object.fromEntries(
+    eligibleCredits.map((credit, index) => {
+      const isLast = index === eligibleCredits.length - 1;
+      const share = isLast
+        ? roundToCents(pool - allocated)
+        : roundToCents(pool * (credit.remainingPrincipal / totalPrincipal));
+      allocated = roundToCents(allocated + share);
+      return [credit.id, share];
+    }),
+  ) as Record<string, number>;
+}
+
 export function getInstallmentAllocation(
   credit: Pick<Credit, "loan" | "installments" | "payment">,
   installmentNumber: number,

@@ -30,6 +30,7 @@ type InvestmentsPanelProps = {
   closed: Investment[];
   available: number;
   creditAvailable: Record<string, number>;
+  externalProfitByCredit: Record<string, number>;
   draft: InvestmentDraft;
   onDraftChange: <K extends keyof InvestmentDraft>(
     field: K,
@@ -51,6 +52,7 @@ export function InvestmentsPanel({
   closed,
   available,
   creditAvailable,
+  externalProfitByCredit,
   draft,
   onDraftChange,
   onAdd,
@@ -75,6 +77,9 @@ export function InvestmentsPanel({
   const selectedCreditId = draft.creditId ?? activeCreditId;
   const selectedCreditAvailable = selectedCreditId
     ? creditAvailable[selectedCreditId] ?? 0
+    : 0;
+  const selectedExternalProfit = selectedCreditId
+    ? externalProfitByCredit[selectedCreditId] ?? 0
     : 0;
 
   useEffect(() => {
@@ -248,7 +253,7 @@ export function InvestmentsPanel({
           )}
           <small>
             {draft.capitalSource === "loan"
-              ? `Se descontará del crédito seleccionado. Disponible en este crédito: ${money.format(selectedCreditAvailable)}. Capital disponible global: ${money.format(available)}.`
+              ? `Disponible de este crédito: ${money.format(selectedCreditAvailable)}. Incluye ${money.format(selectedExternalProfit)} de ganancias estimadas repartidas desde operaciones cerradas con otras fuentes.`
               : "El monto base no modifica el préstamo. Cada adicional usa su propio origen."}
           </small>
         </label>

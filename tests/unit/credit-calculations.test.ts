@@ -1,5 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { getCreditTotals } from "../../app/finance/credit-calculations";
+import {
+  distributeProfitProportionally,
+  getCreditTotals,
+} from "../../app/finance/credit-calculations";
+
+describe("non-loan profit distribution", () => {
+  it("assigns all realized profit to the only credit with principal remaining", () => {
+    expect(distributeProfitProportionally(380.58, [
+      { id: "active", remainingPrincipal: 5_000 },
+      { id: "completed", remainingPrincipal: 0 },
+    ])).toEqual({ active: 380.58 });
+  });
+
+  it("splits profit by remaining principal and preserves every cent", () => {
+    const distribution = distributeProfitProportionally(380.58, [
+      { id: "larger", remainingPrincipal: 5_000 },
+      { id: "smaller", remainingPrincipal: 3_000 },
+    ]);
+
+    expect(distribution).toEqual({ larger: 237.86, smaller: 142.72 });
+    expect(Object.values(distribution).reduce((sum, amount) => sum + amount, 0)).toBeCloseTo(380.58, 2);
+  });
+
+  it("does not distribute losses or when no credits have principal remaining", () => {
+    expect(distributeProfitProportionally(-10, [{ id: "credit", remainingPrincipal: 500 }])).toEqual({});
+    expect(distributeProfitProportionally(10, [{ id: "credit", remainingPrincipal: 0 }])).toEqual({});
+  });
+});
 
 describe("credit principal calculations", () => {
   it("splits total interest evenly and subtracts only principal from the balance", () => {

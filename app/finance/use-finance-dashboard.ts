@@ -17,7 +17,11 @@ import type {
   InvestmentStatus,
   InvestmentValues,
 } from "./types";
-import { getCreditTotals, getInstallmentAllocation } from "./credit-calculations";
+import {
+  distributeProfitProportionally,
+  getCreditTotals,
+  getInstallmentAllocation,
+} from "./credit-calculations";
 import {
   getCreditFundedInvestmentCost,
   getInvestmentCostInSoles,
@@ -196,6 +200,19 @@ export function useFinanceDashboard() {
     ]),
   ) as Record<string, number>;
 
+  const nonLoanRealizedProfit = investments.reduce((sum, investment) => {
+    if (investment.status !== "closed" || investment.capitalSource === "loan") return sum;
+    const profit = investment.salePricePen - getInvestmentCostInSoles(investment);
+    return sum + Math.max(0, profit);
+  }, 0);
+  const externalProfitByCredit = distributeProfitProportionally(
+    nonLoanRealizedProfit,
+    credits.map((credit) => ({
+      id: credit.id,
+      remainingPrincipal: getCreditTotals(credit).remainingLoan,
+    })),
+  );
+
   function getCreditAvailable(creditId: string, excludedInvestmentId?: string) {
     const credit = credits.find((item) => item.id === creditId);
     if (!credit) return 0;
@@ -209,7 +226,8 @@ export function useFinanceDashboard() {
 
     return Math.max(
       0,
-      credit.loan - getCreditTotals(credit).principalPaid - used + realizedProfit,
+      credit.loan - getCreditTotals(credit).principalPaid - used + realizedProfit +
+        (externalProfitByCredit[creditId] ?? 0),
     );
   }
 
@@ -584,6 +602,7 @@ export function useFinanceDashboard() {
     expectedReturn: totals.openCapital ? (totals.projectedProfit / totals.openCapital) * 100 : 0,
     setActiveCreditId,
     creditAvailable,
+    externalProfitByCredit,
     saveCredit,
     removeCredit,
     updateDraft,
